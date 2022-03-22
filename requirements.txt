@@ -1,0 +1,12 @@
+opencv-python
+matplotlib
+scikit-image
+Pillow
+pandas
+albumentations
+sklearn
+scikit-learn
+scipy
+scikit-multilearn
+rasterio
+psycopg2
