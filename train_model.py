@@ -421,9 +421,6 @@ def train_model(input_images, input_labels, params_train,
 
                 def val_subset(subset_x, subset_y):
 
-                    # zero the gradients
-                    optimizer.zero_grad()
-
                     # data to gpu
                     subset_x = subset_x.to(device)
                     subset_y = subset_y.to(device)
