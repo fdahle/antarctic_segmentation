@@ -1,6 +1,9 @@
 # Antarctic segmentation
 This repository contains the code for applying semantic segmentation on historical cryospheric imagery. For more information see the [ISPRS](https://www.isprs2022-nice.com/) paper <b>Semantic segmentation of historical photographs of the Antarctic Peninsula</b>.
 
+![Example for segmentation](https://github.com/fdahle/antarctic_segmentation/blob/main/readme/segmentation_example.png?raw=true)
+
+
 <h3>Technical information</h3>
 
 Work in progress!
