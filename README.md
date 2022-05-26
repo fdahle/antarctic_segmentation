@@ -6,6 +6,19 @@ This repository contains the code for applying semantic segmentation on historic
 
 <h3>Technical information</h3>
 
+Note that in the currenet state the code is very specific for my project and cannot be use from others without adaptions. In near future this code will be changed to make it more usable by the public.
+
+There are three important main functions in this repository:
+
+- train_model.py:
+This function is loading the data/model and initizalizing the training.
+
+- evaluate_model.py:
+With this code a created model can be evaluated.
+
+- segmentator.py:
+A small tool with a gui, that can be used to improve segmented imagery (for example created by unsupervised segmentation). 
+
 Work in progress!
 
 <h3>Background</h3>
