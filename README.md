@@ -3,6 +3,7 @@ This repository contains the code for applying semantic segmentation on historic
 
 ![Example for segmentation](https://github.com/fdahle/antarctic_segmentation/blob/main/readme/segmentation_example.png?raw=true)
 
+The images used in this project are [publicly available](https://www.pgc.umn.edu/data/aerial/) and can be downloaded [here](https://data.pgc.umn.edu/aerial/usgs/tma/photos/). 
 
 <h3>Technical information</h3>
 
