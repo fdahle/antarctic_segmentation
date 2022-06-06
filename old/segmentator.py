@@ -35,17 +35,15 @@ segmentator_params = {
     "min_cluster_size": 50000,  # the minimum size of a cluster so that the cluster is not removed
     "scribble_size": 25,  # the initial size of the scribbler
     "small_image_size": 3000,
-    "path_images": "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/"
-                   "data/aerial/TMA/downloaded",  # path to the raw images
-    "path_segmented": "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/"
-                      "data/aerial/TMA/segmented"  # path to the unsupervised images
+    "path_images": "../../data/aerial/TMA/downloaded",  # path to the raw images
+    "path_segmented": "../../data/aerial/TMA/segmented"  # path to the unsupervised images
 }
 
 
 class Segmentator:
 
     def __init__(self, params):
-        # params for Segmentator
+        # params for segmentator
         self.params = params
 
         # params for the gui
@@ -615,7 +613,7 @@ class Segmentator:
         self.tree_supervised.delete(*self.tree_supervised.get_children())
 
         # TODO
-        # if 0 in val_dict:
+        #if 0 in val_dict:
         #    self.tree_supervised.insert("", "end", values=("not set", val_dict[0][0], val_dict[0][1]))
 
         # add values to tree
@@ -1152,7 +1150,8 @@ class Segmentator:
         right_add = self.img_orig_dims[1] - self.border_bounds[3]
 
         # add border to the edge
-        img_output = np.pad(img_output, ((top_add, bottom_add), (left_add, right_add)), pad_with, padder=7)
+        img_output = np.pad(img_output, ((top_add, bottom_add), (left_add, right_add)), pad_with,
+                                                padder=7)
 
         # change datatype so that we can save memory
         img_output = img_output.astype('int')

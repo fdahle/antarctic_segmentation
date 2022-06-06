@@ -18,7 +18,7 @@ class UNET(nn.Module):
         self.upconv2 = self.expand_block(64 * 2, 32, kernel_size, 1, output_padding=1)
         self.upconv1 = self.expand_block(32 * 2, out_channels, kernel_size, 1, output_padding=1)
 
-        # self.relu = nn.ReLU()
+        #self.relu = nn.ReLU()
 
     def __call__(self, input_x):
         # downsampling part
@@ -44,12 +44,10 @@ class UNET(nn.Module):
                             kernel_size=kernel_size, stride=(1, 1), padding=padding),
             torch.nn.BatchNorm2d(out_channels),
             torch.nn.ReLU(),
-            torch.nn.Dropout(p=0.2),
             torch.nn.Conv2d(out_channels, out_channels,
                             kernel_size=kernel_size, stride=(1, 1), padding=padding),
             torch.nn.BatchNorm2d(out_channels),
             torch.nn.ReLU(),
-            torch.nn.Dropout(p=0.2),
             torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         )
 
@@ -59,12 +57,10 @@ class UNET(nn.Module):
     def expand_block(in_channels, out_channels, kernel_size, padding, output_padding=(0, 0)):
         expand = nn.Sequential(torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride=(1, 1), padding=padding),
                                torch.nn.BatchNorm2d(out_channels),
-                               torch.nn.Dropout(p=0.2),
                                torch.nn.ReLU(),
                                torch.nn.Conv2d(
                                    out_channels, out_channels, kernel_size, stride=(1, 1), padding=padding),
                                torch.nn.BatchNorm2d(out_channels),
-                               torch.nn.Dropout(p=0.2),
                                torch.nn.ReLU(),
                                torch.nn.ConvTranspose2d(
                                    out_channels, out_channels, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1),

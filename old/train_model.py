@@ -1,4 +1,3 @@
-import argparse
 import copy
 import os.path
 import json
@@ -7,7 +6,6 @@ import datetime
 import random
 import sys
 import pathlib
-import shutil
 
 import sklearn.metrics as sm
 import numpy as np
@@ -15,7 +13,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from pytorch_msssim import SSIM
 
 # get current code-folder
 workdir = str(pathlib.Path().resolve())[:-4]
@@ -33,32 +30,31 @@ import display_segmented as ds
 import display_unet_subsets as dus
 
 from classes.u_net import UNET
-from classes.u_net_small import UNET_SMALL
 from classes.image_data_set import ImageDataSet
 
 # training params
 params_training = {
-    "model_name": "test_resize_dropout_small_256",
+    "model_name": "train_resized",
     "max_epochs": 10000,  # how many epochs should maximal be trained
-    "learning_rate": 0.001,  # how fast should the model learn
+    "learning_rate": 0.1,  # how fast should the model learn
     "early_stopping": 0,  # when to stop when there's no improvement; 0 disables early stopping
-    "loss_type": "cross_entropy",  # define which loss type should be used ("cross_entropy", "ssim")
+    "loss_type": "crossentropy",  # define which loss type should be used
     "input_layers": 1,  # just the grayscale, add more if anything else is added e.g. dem
     "output_layers": 6,  # equals the number of classes
     "kernel_size": 3,  # how big is the cnn kernel
-    "batch_size": 16,  # how many images per batch
+    "batch_size": 4,  # how many images per batch
     "percentages": [80, 20, 0],  # how many images per training, validation and test (in percentage),
     "ignore_classes": [0, 7],  # which classes should be ignored (for weights, loss and cropping)
-    "save_step": 1,  # after how many steps should the model be saved
+    "save_step": 10,  # after how many steps should the model be saved
     "seed": 123,  # random seed to enable reproducibility
     "device": 'gpu',  # can be ["auto", "cpu", "gpu"]
     "num_workers": 2,  # with how many parallel process should the data be loaded,
-    "bool_continue_training": False,  # if this is true the model_name must already exist (at least the .json-file)
+    "bool_continue_training": True,  # if this is true the model_name must already exist (at least the .json-file)
 }
 
 params_augmentation = {
-    "methods": ["resized", "flipped", "rotation", "brightness", "noise"],  # "normalize"],
-    "aug_size": 256,  # can be for "resized" or "cropped"
+    "methods": ["resized", "flipped", "rotation", "brightness", "noise", "normalize"],
+    "aug_size": 1024,  # can be for "resized" or "cropped"
     "crop_type": "inverted",
     "crop_numbers": 16,  # how many random crops are extracted from an image at training?
 }
@@ -67,83 +63,18 @@ params_augmentation = {
 params_debugging = {
     "max_images": None,  # put None if you want to load all images
     "bool_save": True,
-    "code_location": "local",  # can be server or local
     "fraction": 3,  # how much should be rounded when displaying or saving stats,
-    "print_times": True,
-    "additional_checks": False,
     "display_input_images": False,
-    "display_subset_images_training": False,
-    "display_subset_images_validation": False,
+    "display_subset_images": False
 }
 
 bool_verbose = True
 
-if params_debugging["code_location"] == "server":
-    path_folder_images = "../../data/aerial/TMA/downloaded"
-    path_folder_segmented = "../../data/aerial/TMA/segmented/supervised"
-    path_folder_models = "../../data/machine_learning/segmentation/UNET/models_new"
-elif params_debugging["code_location"] == "local":
-    path_folder_images = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/aerial/TMA/downloaded"
-    path_folder_segmented = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/" \
-                            "aerial/TMA/segmented/supervised"
-    path_folder_models = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/" \
-                         "machine_learning/segmentation/UNET/models_new"
-else:
-    path_folder_images = None
-    path_folder_models = None
-    path_folder_segmented = None
-    print("Please specify the right code location")
-    exit()
+path_folder_images = "../../data/aerial/TMA/downloaded"
+path_folder_segmented = "../../data/aerial/TMA/segmented/supervised"
+path_folder_models = "../../data/machine_learning/segmentation/UNET/models_new"
 
 db_type = "FILES"
-
-# it should be possible to call the function from arguments
-parser = argparse.ArgumentParser()
-
-parser.add_argument('--model_name', metavar='model_name', type=str, help='the name of the model')
-parser.add_argument('--loss_type', metavar='loss_type', type=str, help='the loss used during training')
-parser.add_argument('--batch_size', metavar='batch_size', type=int, help='the batch size used during training')
-parser.add_argument('--bool_continue_training', metavar='bool_continue_training',
-                    type=str, help='should the Training be continued')
-parser.add_argument('--aug_method', metavar='aug_method', type=str, help="with which method will be augmented")
-parser.add_argument('--bool_normalize', metavar="bool_normalize", type=str, help="should the data be normalized")
-
-args = parser.parse_args()
-
-if args.model_name is not None:
-    params_training["model_name"] = args.model_name
-if args.loss_type is not None:
-    params_training["loss_type"] = args.loss_type
-if args.batch_size is not None:
-    params_training["batch_size"] = args.batch_size
-if args.bool_continue_training is not None:
-    if args.bool_continue_training == "True":
-        params_training["bool_continue_training"] = True
-    elif args.bool_continue_training == "False":
-        params_training["bool_continue_training"] = False
-    else:
-        print("The wrong parameter was used")
-        exit()
-if args.aug_method is not None:
-    if args.aug_method == "resized":
-        params_augmentation["methods"][0] = "resized"
-        params_augmentation["aug_size"] = 1024
-    elif args.aug_mehthod == "cropped":
-        params_augmentation["methods"][0] = "cropped"
-        params_augmentation["aug_size"] = 512
-    else:
-        print("The wrong parameter was used")
-        exit()
-if args.aug_method is not None:
-    if args.bool_continue_training == "True":
-        if params_augmentation["methods"][-1] != "normalize":
-            params_augmentation["methods"].append("normalize")
-    elif args.bool_continue_training == "False":
-        if params_augmentation["methods"][-1] == "normalize":
-            params_augmentation["methods"].pop()
-    else:
-        print("The wrong parameter was used")
-        exit()
 
 """
 train_model(input_images, input_labels, params_train, params_aug, params_debug, verbose):
@@ -165,8 +96,6 @@ INPUT:
 OUTPUT:
 """
 
-print(f"Start training {params_training['model_name']}")
-
 
 def train_model(input_images, input_labels, params_train,
                 params_aug, params_debug, verbose=False):
@@ -187,44 +116,23 @@ def train_model(input_images, input_labels, params_train,
         print("A wrong device type is set, device is set to 'cpu'")
         device = 'cpu'
 
-    debug_time = datetime.datetime.now()
-
     # initialize the model
-    if verbose:
-        print("Initialize model")
-    unet = UNET_SMALL(
+    unet = UNET(
         params_train["input_layers"],
         params_train["output_layers"],
         params_train["kernel_size"]
     )
     unet = unet.to(device)
 
-    if params_debug["print_times"]:
-        difference = datetime.datetime.now() - debug_time
-        print(f"Model initialized in {difference}")
-
-    debug_time = datetime.datetime.now()
-
     # initialize the optimizer
     if verbose:
         print("Initialize optimizer")
     optimizer = torch.optim.Adam(unet.parameters(), lr=params_train["learning_rate"])
 
-    if params_debug["print_times"]:
-        difference = datetime.datetime.now() - debug_time
-        print(f"Optimizer initialized in {difference}")
-
-    debug_time = datetime.datetime.now()
-
     # initialize the datasets
     if verbose:
         print("Initialize dataset")
-    dataset = ImageDataSet(input_images, input_labels, params_train, params_aug,
-                           debug_print_times=params_debug["print_times"], verbose=verbose)
-
-    if params_debug["print_times"]:
-        difference = datetime.datetime.now() - debug_time
-        print(f"Dataset initialized in {difference}")
+    dataset = ImageDataSet(input_images, input_labels, params_train, params_aug, verbose=verbose)
 
     # a custom collate function to allow batches that contain different sizes
     def custom_collate(batch):
@@ -250,41 +158,21 @@ def train_model(input_images, input_labels, params_train,
         "generator": g
     }
 
-    debug_time = datetime.datetime.now()
-
-    # create the data loaders for train and validation
+    # create the data loaders
     if verbose:
-        print("Initialize dataloader")
+        print("Initialize dataloaders")
     train_dl = DataLoader(dataset, sampler=dataset.get_train_sampler(), **params_dataset)
     val_dl = DataLoader(dataset, sampler=dataset.get_valid_sampler(), **params_dataset)
-
-    # create data loader for test
     if params_train["percentages"][2] > 0:
-        test_dl = DataLoader(dataset, sampler=dataset.get_test_sampler(), **params_dataset)  # noqa
-
-    if params_debug["print_times"]:
-        difference = datetime.datetime.now() - debug_time
-        print(f"Dataloaders initialized in {difference}")
-
-    # if params_debug["additional_checks"]:
-    #     train_ids = dataset.get_ids(category="train")
-    #     val_ids = dataset.get_ids(category="validation")
-    #     test_ids = dataset.get_ids(category="test")
-
-    debug_time = datetime.datetime.now()
+        test_dl = DataLoader(dataset, sampler=dataset.get_test_sampler(), **params_dataset)
 
     # get the weights
     weights = dataset.get_weights(ignore=params_train["ignore_classes"])
     weights = torch.FloatTensor(weights)
     weights = weights.to(device)
 
-    if params_debug["print_times"]:
-        difference = datetime.datetime.now() - debug_time
-        print(f"Weights calculated in {difference}")
-
-    if params_debug["print_times"] is False:
-        time_elapsed = datetime.datetime.now() - start
-        print('Initialization complete in', str(time_elapsed))
+    time_elapsed = datetime.datetime.now() - start
+    print('Initialization complete in', str(time_elapsed))
 
     # track starting time for training
     start = datetime.datetime.now()
@@ -294,11 +182,9 @@ def train_model(input_images, input_labels, params_train,
 
     # define what should be saved
     saving_for = ["train", "val"]
-    epoch_values = ["loss", "acc", "f1", "kappa"]
+    epoch_values = ["loss", "acc"]
     best_values = ["best_loss_value", "best_loss_epoch",
-                   "best_acc_value", "best_acc_epoch",
-                   "best_f1_value", "best_f1_epoch",
-                   "best_kappa_value", "best_kappa_epoch"]
+                   "best_acc_value", "best_acc_epoch"]
 
     # create  starting epoch and the dicts for saving all parameters during training
     # if continue_training is true these dicts are not empty
@@ -306,7 +192,6 @@ def train_model(input_images, input_labels, params_train,
 
         # no time yet trained (this is required for the json
         time_from_previous_training = "0:0:0"
-        training_number = 1
 
         # that will save later the params of the dataset (needed for different params per training)
         dataset_params = {}
@@ -321,7 +206,6 @@ def train_model(input_images, input_labels, params_train,
                 statistics_dict[elem1 + "_" + elem2] = {}
             for elem2 in best_values:
                 statistics_dict[elem1 + "_" + elem2] = 0
-        statistics_dict["duration"] = {}
 
         # change loss to 100 (because the smallest loss is the best, not the highest)
         statistics_dict["train_best_loss_value"] = 100.0
@@ -346,9 +230,6 @@ def train_model(input_images, input_labels, params_train,
         # get the number of epochs
         epoch = len(statistics_dict["train_loss"])
 
-        # get the number of trainings and increase
-        training_number = len(json_dict["params_augmentation"]) + 1
-
         if epoch >= params_train["max_epochs"]:
             print(f"Please set a higher number of max_epochs (starting_epoch of {epoch} >= than "
                   f"max_epochs of {params_train['max_epochs']})")
@@ -357,12 +238,6 @@ def train_model(input_images, input_labels, params_train,
         # load model data (pth first, pt second)
         if os.path.exists(path_folder_models + "/" + params_training["model_name"] + ".pth"):
             continue_model_path = path_folder_models + "/" + params_training["model_name"] + ".pth"
-
-            date_time = datetime.datetime.now().strftime("%d_%d_%Y")
-            copy_path = continue_model_path[:-4] + "_backup_" + date_time + ".pth"
-
-            shutil.copyfile(continue_model_path, copy_path)
-
             checkpoint = torch.load(continue_model_path, map_location=device)
 
             # load model data to model
@@ -371,34 +246,20 @@ def train_model(input_images, input_labels, params_train,
 
         elif os.path.exists(path_folder_models + "/" + params_training["model_name"] + ".pt"):
             continue_model_path = path_folder_models + "/" + params_training["model_name"] + ".pt"
-
-            date_time = datetime.datetime.now().strftime("%d_%d_%Y")
-            copy_path = continue_model_path[:-3] + "__backup_" + date_time + ".pt"
-
-            shutil.copyfile(continue_model_path, copy_path)
-
             unet = torch.load(continue_model_path, map_location=device)
 
     def calc_loss(y_pred, y_true, input_params_train, input_weights):
-        if input_params_train["loss_type"] == "cross_entropy":
+        if input_params_train["loss_type"] == "crossentropy":
             loss_fn = nn.CrossEntropyLoss(weight=input_weights, ignore_index=6)
-            loss = loss_fn(y_pred, y_true)
-        elif input_params_train["loss_type"] == "ssim":
-            y_true_expanded = torch.unsqueeze(y_true, 1).double()
-            y_argmax = torch.argmax(y_pred, 1)
-            y_argmax_expanded = torch.unsqueeze(y_argmax, 1).double()
-
-            ssim_module = SSIM(data_range=input_params_train["output_layers"], size_average=True, channel=1)
-            loss = 1 - ssim_module(y_argmax_expanded, y_true_expanded)
-
         else:
-            loss = None
+            loss_fn = None
             print("A wrong loss was set. Please select a different loss type")
             exit()
 
+        loss = loss_fn(y_pred, y_true)
         return loss
 
-    def calc_val(val_type, y_pred, y_true, input_weights):
+    def calc_accuracy(y_pred, y_true, input_weights):
 
         np_y_pred = y_pred.cpu().detach().numpy().flatten()
         np_y_true = y_true.cpu().detach().numpy().flatten()
@@ -409,36 +270,14 @@ def train_model(input_images, input_labels, params_train,
         for i, elem in enumerate(np_weights):
             weight_matrix[weight_matrix == i] = elem
 
-        if val_type == "accuracy":
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore")
+            accuracy = sm.balanced_accuracy_score(np_y_true, np_y_pred, sample_weight=weight_matrix)
 
-                accuracy = sm.balanced_accuracy_score(np_y_true, np_y_pred, sample_weight=weight_matrix)
-
-            return accuracy
-
-        elif val_type == "f1":
-
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore")
-
-                f1 = sm.f1_score(np_y_true, np_y_pred, average="weighted", sample_weight=weight_matrix)
-
-            return f1
-
-        elif val_type == "kappa":
-
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore")
-
-                kappa = sm.cohen_kappa_score(np_y_true, np_y_pred, weights="linear", sample_weight=weight_matrix)
-
-            return kappa
+        return accuracy
 
     def train_one_epoch(model, train_dataloader, val_dataloader, train_params, input_weights):
-
-        epoch_start = datetime.datetime.now()
 
         # create one dict to save all avg values
         epoch_avg_statistics = {}
@@ -450,15 +289,11 @@ def train_model(input_images, input_labels, params_train,
         # save loss and acc per batch to calculate the avg
         train_loss_batch = []
         train_acc_batch = []
-        train_f1_batch = []
-        train_kappa_batch = []
 
         batch_step = 0
 
         # iterate over all batches
         for train_x, train_y in train_dataloader:
-
-            batch_start = datetime.datetime.now()
 
             batch_step += 1
 
@@ -479,9 +314,9 @@ def train_model(input_images, input_labels, params_train,
                 # zero the gradients
                 optimizer.zero_grad()
 
-                if params_debug["display_subset_images_training"]:
+                if params_debug["display_subset_images"]:
                     normalized = "normalize" in params_aug["methods"]
-                    dus.display_unet_subsets(subset_x, subset_y, normalized, "Training")
+                    dus.display_unet_subsets(subset_x, subset_y, normalized)
 
                 # data to gpu
                 subset_x = subset_x.to(device)
@@ -493,14 +328,9 @@ def train_model(input_images, input_labels, params_train,
                 # get the max prediction for every cell
                 subset_pred_max = torch.argmax(subset_pred, dim=1)
 
-                # get loss, accuracy, f1 and kappa
+                # get loss, accuracy
                 loss_for_subset = calc_loss(subset_pred, subset_y, train_params, input_weights)
-                accuracy_for_subset = calc_val("accuracy", subset_pred_max, subset_y, input_weights)
-                f1_for_subset = calc_val("f1", subset_pred_max, subset_y, input_weights)
-                kappa_for_subset = calc_val("kappa", subset_pred_max, subset_y, input_weights)
-
-                if train_params["loss_type"] == "ssim":
-                    loss_for_subset.requires_grad = True
+                accuracy_for_subset = calc_accuracy(subset_pred_max, subset_y, input_weights)
 
                 # backpropagation
                 loss_for_subset.backward()
@@ -509,18 +339,14 @@ def train_model(input_images, input_labels, params_train,
                 # make the tensors to normal values
                 loss_for_subset = loss_for_subset.cpu().detach().item()
 
-                return loss_for_subset, accuracy_for_subset, f1_for_subset, kappa_for_subset
+                return loss_for_subset, accuracy_for_subset
 
             # if now stuff is bigger than batch-size we need another loop
             if train_x.shape[0] > train_params["batch_size"]:
 
                 subset_losses = []
                 subset_accuracies = []
-                subset_f1_scores = []
-                subset_kappa_scores = []
-
                 for i in range(0, train_x.shape[0], train_params["batch_size"]):
-
                     subset_min = i
                     subset_max = i + train_params["batch_size"]
 
@@ -530,72 +356,40 @@ def train_model(input_images, input_labels, params_train,
                     train_x_subset = train_x[subset_min:subset_max, :, :, :]
                     train_y_subset = train_y[subset_min:subset_max, :, :]
 
-                    subset_loss, subset_acc, subset_f1, subset_kappa = train_subset(train_x_subset, train_y_subset)
+                    subset_loss, subset_acc = train_subset(train_x_subset, train_y_subset)
 
                     subset_losses.append(subset_loss)
                     subset_accuracies.append(subset_acc)
-                    subset_f1_scores.append(subset_f1)
-                    subset_kappa_scores.append(subset_kappa)
-
-                    # print the statistics of one subset
-                    if verbose:
-                        print('    Current subset: {} - Loss: {} - Acc: {} - F1: {} - Kappa: {} - AllocMem (Mb): {}'.
-                              format(
-                                    batch_step,
-                                    round(subset_loss, params_debug["fraction"]),
-                                    round(subset_acc, params_debug["fraction"]),
-                                    round(subset_f1, params_debug["fraction"]),
-                                    round(subset_kappa, params_debug["fraction"]),
-                                    round(torch.cuda.memory_allocated() / 1024 / 1024, 4)
-                                    ))
 
                 train_loss = np.mean(subset_losses)
                 train_accuracy = np.mean(subset_accuracies)
-                train_f1 = np.mean(subset_f1_scores)
-                train_kappa = np.mean(subset_kappa_scores)
             else:
-                train_loss, train_accuracy, train_f1, train_kappa = train_subset(train_x, train_y)
+                train_loss, train_accuracy = train_subset(train_x, train_y)
 
             # save loss and acc of one batch
             train_loss_batch.append(train_loss)
             train_acc_batch.append(train_accuracy)
-            train_f1_batch.append(train_f1)
-            train_kappa_batch.append(train_kappa)
-
-            one_batch_duration = datetime.datetime.now() - batch_start
 
             # print the statistics of one batch
             if verbose:
-                print('  Current batch: {} - Loss: {} - Acc: {} - F1: {} - Kappa: {} - AllocMem (Mb): {} ({})'.format(
+                print('  Current batch: {} - Loss: {} - Acc: {} -  AllocMem (Mb): {}'.format(
                     batch_step,
                     round(train_loss, params_debug["fraction"]),
                     round(train_accuracy, params_debug["fraction"]),
-                    round(train_f1, params_debug["fraction"]),
-                    round(train_kappa, params_debug["fraction"]),
-                    round(torch.cuda.memory_allocated() / 1024 / 1024, 4),
-                    one_batch_duration
+                    round(torch.cuda.memory_allocated() / 1024 / 1024, 4)
                 ))
 
         # calculate the avg
         epoch_avg_statistics["avg_train_loss"] = sum(train_loss_batch) / len(train_loss_batch)
         epoch_avg_statistics["avg_train_acc"] = sum(train_acc_batch) / len(train_acc_batch)
-        epoch_avg_statistics["avg_train_f1"] = sum(train_f1_batch) / len(train_f1_batch)
-        epoch_avg_statistics["avg_train_kappa"] = sum(train_kappa_batch) / len(train_kappa_batch)
-
-        one_epoch_duration = datetime.datetime.now() - epoch_start
-        epoch_intermediate = datetime.datetime.now()
 
         # print the statistics of one complete epoch
         if verbose:
-            print(' Current epoch: {} - avg. train Loss: {} - avg. train Acc: {} - '
-                  'avg. train F1: {} - avg. train Kappa: {} ({})'.format(
-                    epoch,
-                    round(epoch_avg_statistics["avg_train_loss"], params_debug["fraction"]),
-                    round(epoch_avg_statistics["avg_train_acc"], params_debug["fraction"]),
-                    round(epoch_avg_statistics["avg_train_f1"], params_debug["fraction"]),
-                    round(epoch_avg_statistics["avg_train_kappa"], params_debug["fraction"]),
-                    one_epoch_duration
-                  ))
+            print(' Current epoch: {} - avg. train Loss: {} - avg. train Acc: {}'.format(
+                epoch,
+                round(epoch_avg_statistics["avg_train_loss"], params_debug["fraction"]),
+                round(epoch_avg_statistics["avg_train_acc"], params_debug["fraction"]),
+            ))
 
         ###
         # VALIDATION
@@ -604,16 +398,12 @@ def train_model(input_images, input_labels, params_train,
         # save loss and acc per batch to calculate the avg
         val_loss_batch = []
         val_acc_batch = []
-        val_f1_batch = []
-        val_kappa_batch = []
 
         batch_step = 0
 
         # iterate over all batches
         with torch.no_grad():  # required as otherwise the memory blows up
             for val_x, val_y in val_dataloader:
-
-                batch_start = datetime.datetime.now()
 
                 batch_step += 1
 
@@ -631,10 +421,6 @@ def train_model(input_images, input_labels, params_train,
 
                 def val_subset(subset_x, subset_y):
 
-                    if params_debug["display_subset_images_validation"]:
-                        normalized = "normalize" in params_aug["methods"]
-                        dus.display_unet_subsets(subset_x, subset_y, normalized, "Validation")
-
                     # data to gpu
                     subset_x = subset_x.to(device)
                     subset_y = subset_y.to(device)
@@ -647,23 +433,18 @@ def train_model(input_images, input_labels, params_train,
 
                     # get loss, accuracy
                     loss_for_subset = calc_loss(subset_pred, subset_y, train_params, input_weights)
-                    accuracy_for_subset = calc_val("accuracy", subset_pred_max, subset_y, input_weights)
-                    f1_for_subset = calc_val("f1", subset_pred_max, subset_y, input_weights)
-                    kappa_for_subset = calc_val("kappa", subset_pred_max, subset_y, input_weights)
+                    accuracy_for_subset = calc_accuracy(subset_pred_max, subset_y, input_weights)
 
                     # make the tensors to normal values
                     loss_for_subset = loss_for_subset.cpu().detach().item()
 
-                    return loss_for_subset, accuracy_for_subset, f1_for_subset, kappa_for_subset
+                    return loss_for_subset, accuracy_for_subset
 
                 # if now stuff is bigger than batch-size we need another loop
                 if val_x.shape[0] > train_params["batch_size"]:
 
                     subset_losses = []
                     subset_accuracies = []
-                    subset_f1_scores = []
-                    subset_kappa_scores = []
-
                     for i in range(0, val_x.shape[0], train_params["batch_size"]):
                         subset_min = i
                         subset_max = i + train_params["batch_size"]
@@ -674,92 +455,52 @@ def train_model(input_images, input_labels, params_train,
                         val_x_subset = val_x[subset_min:subset_max, :, :, :]
                         val_y_subset = val_y[subset_min:subset_max, :, :]
 
-                        subset_loss, subset_acc, subset_f1, subset_kappa = val_subset(val_x_subset, val_y_subset)
+                        subset_loss, subset_acc = val_subset(val_x_subset, val_y_subset)
 
                         subset_losses.append(subset_loss)
                         subset_accuracies.append(subset_acc)
-                        subset_f1_scores.append(subset_f1)
-                        subset_kappa_scores.append(subset_kappa)
-
-                        one_batch_duration = datetime.datetime.now() - batch_start
-
-                        # print the statistics of one batch
-                        if verbose:
-                            print(
-                                '    Current subset: {} - Loss: {} - Acc: {} - '
-                                'F1: {} - Kappa: {} - AllocMem (Mb): {} ({})'.format(
-                                    batch_step,
-                                    round(subset_loss, params_debug["fraction"]),
-                                    round(subset_acc, params_debug["fraction"]),
-                                    round(subset_f1, params_debug["fraction"]),
-                                    round(subset_kappa, params_debug["fraction"]),
-                                    round(torch.cuda.memory_allocated() / 1024 / 1024, 4),
-                                    one_batch_duration
-                                ))
 
                     val_loss = np.mean(subset_losses)
                     val_accuracy = np.mean(subset_accuracies)
-                    val_f1 = np.mean(subset_f1_scores)
-                    val_kappa = np.mean(subset_kappa_scores)
                 else:
-                    val_loss, val_accuracy, val_f1, val_kappa = val_subset(val_x, val_y)
+                    val_loss, val_accuracy = val_subset(val_x, val_y)
 
                 # save loss and acc of one batch
                 val_loss_batch.append(val_loss)
                 val_acc_batch.append(val_accuracy)
-                val_f1_batch.append(val_f1)
-                val_kappa_batch.append(val_kappa)
 
                 # print the statistics of one batch
                 if verbose:
-                    print('  Current batch: {} - Loss: {} - Acc: {} - F1: {} - Kappa: {} - AllocMem (Mb): {}'.format(
+                    print('  Current batch: {} - Loss: {} - Acc: {} -  AllocMem (Mb): {}'.format(
                         batch_step,
                         round(val_loss, params_debug["fraction"]),
                         round(val_accuracy, params_debug["fraction"]),
-                        round(val_f1, params_debug["fraction"]),
-                        round(val_kappa, params_debug["fraction"]),
                         round(torch.cuda.memory_allocated() / 1024 / 1024, 4)
                     ))
 
         # calculate the avg
         epoch_avg_statistics["avg_val_loss"] = sum(val_loss_batch) / len(val_loss_batch)
         epoch_avg_statistics["avg_val_acc"] = sum(val_acc_batch) / len(val_acc_batch)
-        epoch_avg_statistics["avg_val_f1"] = sum(val_f1_batch) / len(val_f1_batch)
-        epoch_avg_statistics["avg_val_kappa"] = sum(val_kappa_batch) / len(val_kappa_batch)
-
-        one_epoch_duration = datetime.datetime.now() - epoch_intermediate
 
         # print the statistics of one complete epoch
         if verbose:
-            print(' Current epoch: {} - avg. val Loss: {} - avg. val Acc: {} - '
-                  'avg. val F1: {} - avg. val Kappa: {} - ({})'.format(
-                    epoch,
-                    round(epoch_avg_statistics["avg_val_loss"], params_debug["fraction"]),
-                    round(epoch_avg_statistics["avg_val_acc"], params_debug["fraction"]),
-                    round(epoch_avg_statistics["avg_val_f1"], params_debug["fraction"]),
-                    round(epoch_avg_statistics["avg_val_kappa"], params_debug["fraction"]),
-                    one_epoch_duration
-                  ))
+            print(' Current epoch: {} - avg. val Loss: {} - avg. val Acc: {}'.format(
+                epoch,
+                round(epoch_avg_statistics["avg_val_loss"], params_debug["fraction"]),
+                round(epoch_avg_statistics["avg_val_acc"], params_debug["fraction"]),
+            ))
 
-        # calculate complete epoch duration
-        one_epoch_duration = str(datetime.datetime.now() - epoch_start)
+        return epoch_avg_statistics
 
-        return epoch_avg_statistics, one_epoch_duration
-
-    def update_statistics(input_epoch, stat_dict, epoch_stats, stats_epoch_duration):
+    def update_statistics(input_epoch, stat_dict, epoch_stats):
 
         stat_dict["final_epoch"] = input_epoch
 
         # save the values of the epoch
         stat_dict["train_loss"][input_epoch] = epoch_stats["avg_train_loss"]
         stat_dict["train_acc"][input_epoch] = epoch_stats["avg_train_acc"]
-        stat_dict["train_f1"][input_epoch] = epoch_stats["avg_train_f1"]
-        stat_dict["train_kappa"][input_epoch] = epoch_stats["avg_train_kappa"]
         stat_dict["val_loss"][input_epoch] = epoch_stats["avg_val_loss"]
         stat_dict["val_acc"][input_epoch] = epoch_stats["avg_val_acc"]
-        stat_dict["val_f1"][input_epoch] = epoch_stats["avg_val_f1"]
-        stat_dict["val_kappa"][input_epoch] = epoch_stats["avg_val_kappa"]
-        stat_dict["duration"][input_epoch] = stats_epoch_duration
 
         # for early stopping
         model_is_the_best = False
@@ -774,16 +515,6 @@ def train_model(input_images, input_labels, params_train,
             stat_dict["train_best_acc_value"] = epoch_stats["avg_train_acc"]
             stat_dict["train_best_acc_epoch"] = input_epoch
 
-        # save the best value and epoch for train f1
-        if epoch_stats["avg_train_f1"] > stat_dict["train_best_f1_value"]:
-            stat_dict["train_best_f1_value"] = epoch_stats["avg_train_f1"]
-            stat_dict["train_best_f1_epoch"] = input_epoch
-
-        # save the best value and epoch for train kappa
-        if epoch_stats["avg_train_kappa"] > stat_dict["train_best_kappa_value"]:
-            stat_dict["train_best_kappa_value"] = epoch_stats["avg_train_kappa"]
-            stat_dict["train_best_kappa_epoch"] = input_epoch
-
         # save the best value and epoch for val loss
         if epoch_stats["avg_val_loss"] < stat_dict["val_best_loss_value"]:
             stat_dict["val_best_loss_value"] = epoch_stats["avg_val_loss"]
@@ -795,19 +526,9 @@ def train_model(input_images, input_labels, params_train,
             stat_dict["val_best_acc_value"] = epoch_stats["avg_train_acc"]
             stat_dict["val_best_acc_epoch"] = input_epoch
 
-        # save the best value and epoch for val f1
-        if epoch_stats["avg_val_f1"] < stat_dict["val_best_f1_value"]:
-            stat_dict["val_best_f1_value"] = epoch_stats["avg_train_f1"]
-            stat_dict["val_best_f1_epoch"] = input_epoch
-
-        # save the best value and epoch for val kappa
-        if epoch_stats["avg_val_kappa"] < stat_dict["val_best_kappa_value"]:
-            stat_dict["val_best_kappa_value"] = epoch_stats["avg_train_kappa"]
-            stat_dict["val_best_kappa_epoch"] = input_epoch
-
         return statistics_dict, model_is_the_best
 
-    def dump_statistics(dump_path, _training_number, _time_from_previous_training, _time_elapsed):
+    def dump_statistics(dump_path):
 
         # we want model name to be at the top of the json, therefore extract and delete in train-params
         model_name = params_train["model_name"]
@@ -816,22 +537,21 @@ def train_model(input_images, input_labels, params_train,
         # save the current time and convert it to formats that will be used in the statistics
         now = datetime.datetime.now()
         now_str = now.strftime("%d/%m/%Y %H:%M")
-
-        training_iteration = "training_" + str(_training_number)
+        now_fl_str = now.strftime("%d_%m_%Y_%H_%M")
 
         # convert the time from the previous dicts to timedelta
-        hours = int(_time_from_previous_training.split(":")[0])
-        minutes = int(_time_from_previous_training.split(":")[1])
-        seconds = float(_time_from_previous_training.split(":")[2])
+        hours = int(time_from_previous_training.split(":")[0])
+        minutes = int(time_from_previous_training.split(":")[1])
+        seconds = float(time_from_previous_training.split(":")[2])
         previous_time_delta = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
         # add old training time to new and format it
-        train_time = previous_time_delta + _time_elapsed
+        train_time = previous_time_delta + time_elapsed
         train_time_formatted = str(train_time)
 
         # add the parameters from the current training to the dict
-        dataset_params[training_iteration] = dataset.get_params()
-        augmentation_params[training_iteration] = params_aug
+        dataset_params[now_fl_str] = dataset.get_params()
+        augmentation_params[now_fl_str] = params_aug
 
         # dump statistics
         json_dict_to_dump = {
@@ -870,11 +590,10 @@ def train_model(input_images, input_labels, params_train,
                 print('Epoch {} of {}'.format(epoch, params_train["max_epochs"]))
 
             # the actual training
-            epoch_statistics, epoch_duration = train_one_epoch(unet, train_dl, val_dl, params_train, weights)
+            epoch_statistics = train_one_epoch(unet, train_dl, val_dl, params_train, weights)
 
             # evaluate the statistics
-            statistics_dict, save_model_because_best = update_statistics(epoch, statistics_dict,
-                                                                         epoch_statistics, epoch_duration)
+            statistics_dict, save_model_because_best = update_statistics(epoch, statistics_dict, epoch_statistics)
 
             # init dict for best model (required so that pycharm does not complain)
             best_model_dict = None
@@ -887,7 +606,7 @@ def train_model(input_images, input_labels, params_train,
                 early_stopping_counter += 1
 
             # save intermediate model every xth step
-            if epoch % params_train["save_step"] == 0 and params_debug["bool_save"] is True:
+            if epoch % params_train["save_step"] == 0:
 
                 # create path
                 intermediate_model_path = path_folder_models + "/" + params_train["model_name"] + ".pth"
@@ -910,10 +629,7 @@ def train_model(input_images, input_labels, params_train,
                 if os.path.exists(intermediate_dict_path):
                     os.remove(intermediate_dict_path)
 
-                # track intermediate time
-                time_elapsed = datetime.datetime.now() - start
-
-                dump_statistics(intermediate_dict_path, training_number, time_from_previous_training, time_elapsed)
+                dump_statistics(intermediate_dict_path)
 
                 if verbose:
                     print("Save intermediate dict to '{}'".format(intermediate_dict_path))
@@ -985,7 +701,7 @@ def train_model(input_images, input_labels, params_train,
         print("Model successfully saved to '{}'".format(model_path))
 
     # dump statistics to json
-    dump_statistics(json_path, training_number, time_from_previous_training, time_elapsed)
+    dump_statistics(json_path)
 
 
 if __name__ == "__main__":
@@ -1021,46 +737,8 @@ if __name__ == "__main__":
             print(f"Something went wrong with {img_id} and this image is skipped")
             continue
 
-        # correct ids
-        correct_ids = ["CA172032V0190", "CA183533R0058", "CA135632V0031",
-                       "CA184733R0095", "CA216733R0367", "CA179231L0038",
-                       "CA135433R0350", "CA216631L0328", "CA184432V0154",
-                       "CA184431L0143", "CA180031L0060", "CA213733R0050",
-                       "CA181331L0123", "CA184533R0238", "CA184532V0201",
-                       "CA184532V0219", "CA184432V0113", "CA181332V0125",
-                       "CA214832V0090", "CA182033R0051", "CA213731L0035",
-                       "CA216731L0333", "CA184432V0115"]
-
-        if img_id == "CA184532V0231":
-            temp = np.zeros((350, segmented.shape[1]))
-            temp[:, :] = 2
-            temp[:, 8677:] = 7
-            segmented = np.concatenate((segmented, temp), axis=0)
-            segmented = segmented.astype(int)
-
-        if img_id == "CA184532V0229":
-            temp = np.zeros((350, segmented.shape[1]))
-            temp[:, :] = 2
-            segmented = np.concatenate((segmented, temp), axis=0)
-            segmented = segmented.astype(int)
-
-        # TEMP WORKAROUND
-        if image.shape[0] == segmented.shape[0] - 350:
-            print("HI")
-            segmented = segmented[0:segmented.shape[0] - 350, :]
-
-        # if img_id not in correct_ids:
-        #    print(img_id)
-        #    import display_multiple_images as dmi # noqa
-        #    dmi.display_multiple_images([image, segmented])
-
-        # if img_id == "CA184532V0229":
-        #    import display_multiple_images as dmi
-        #    dmi.display_multiple_images([image, segmented])
-
         # images must have the same shape, otherwise the model fails
-        assert image.shape == segmented.shape, \
-            f"Image shape {image.shape} is different from segmented shape {segmented.shape}"
+        assert image.shape == segmented.shape
 
         images[img_id] = image
         labels[img_id] = segmented

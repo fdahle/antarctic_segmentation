@@ -2,7 +2,6 @@ import sys
 import copy
 import random
 import math
-import datetime
 from typing import Dict, Any
 
 import cv2
@@ -17,9 +16,8 @@ from torch.utils.data.sampler import Sampler
 
 class ImageDataSet(Dataset):
 
-    def __init__(self, images, segmented, params_train, params_augmentation, debug_print_times=False, verbose=False):
+    def __init__(self, images, segmented, params_train, params_augmentation, verbose=False):
 
-        self.debug_print_times = debug_print_times
         self.verbose = verbose
 
         percentages = params_train["percentages"]
@@ -35,17 +33,8 @@ class ImageDataSet(Dataset):
         self.images = images  # the raw images
         self.segmented = segmented  # the segmented images
 
-        debug_time = datetime.datetime.now()
         self.composition, self.composition_percentages = self.calc_composition()  # the composition per image
-        if self.debug_print_times:
-            difference = datetime.datetime.now() - debug_time
-            print(f"  - Image composition calculated in {difference}")
-
-        debug_time = datetime.datetime.now()
         self.labels = self.calc_labels()  # which classes are in which image
-        if self.debug_print_times:
-            difference = datetime.datetime.now() - debug_time
-            print(f"  - Labels per image calculated in {difference}")
 
         self.percentages = percentages  # the percentages for train, val, test
 
@@ -73,14 +62,8 @@ class ImageDataSet(Dataset):
                 del self.images[key]
                 del self.segmented[key]
 
-        debug_time = datetime.datetime.now()
-
         # split images in training, val and test
         self.train_ids, self.val_ids, self.test_ids = self.split_in_sets()
-
-        if self.debug_print_times:
-            difference = datetime.datetime.now() - debug_time
-            print(f"  - Dataset split in {difference}")
 
     def __len__(self):
         return len(self.images)
@@ -90,6 +73,8 @@ class ImageDataSet(Dataset):
 
         img = self.images[input_id]
         segmented = self.segmented[input_id]
+
+        img_i = copy.deepcopy(img)
 
         # check if id in train, validation or test
         if input_id in self.train_ids:
@@ -106,17 +91,6 @@ class ImageDataSet(Dataset):
         segmented = segmented - 1
 
         return img, segmented
-
-    def get_ids(self, category):
-
-        assert category in ["train", "validation", "test"], "This category is not existing"
-
-        if category == "train":
-            return self.train_ids
-        elif category == "validation":
-            return self.val_ids
-        elif category == "test":
-            return self.test_ids
 
     def get_train_sampler(self):
         train_sampler = OwnRandomSampler(self.train_ids)
@@ -192,7 +166,7 @@ class ImageDataSet(Dataset):
     def calc_composition(self):
 
         if self.verbose:
-            print("  - Calculate image composition")
+            print("Calculate image composition")
 
         comp_dict = {}
         comp_perc_dict = {}
@@ -227,7 +201,7 @@ class ImageDataSet(Dataset):
     def calc_labels(self):
 
         if self.verbose:
-            print("  - Calculate labels per image")
+            print("calc labels per image")
 
         label_dict = {}
         for key, val in self.segmented.items():
@@ -244,7 +218,7 @@ class ImageDataSet(Dataset):
     def split_in_sets(self):
 
         if self.verbose:
-            print("  - Split image in train, val, test")
+            print("Split image in train, val, test")
 
         # get all ids from dict as list
         list_of_ids = list(self.images.keys())
@@ -255,13 +229,12 @@ class ImageDataSet(Dataset):
 
         # first split in train and a temporary set (for test/val)
         # no seed required as shuffle=False
-        stratifier = IterativeStratification(n_splits=2, sample_distribution_per_fold=dist_1, shuffle=True,
-                                             random_state=self.params_train["seed"])
+        stratifier = IterativeStratification(n_splits=2, sample_distribution_per_fold=dist_1)
 
         # get the idx (=index number, not an id)
         temp_idx, train_idx = next(stratifier.split(X=list_of_ids, y=list_of_labels))
 
-        # convert idx to ids (id = "CA-XX")
+        # convert idx to ids (id = "CAXX")
         train_ids = []
         for i in train_idx:
             train_ids.append(list_of_ids[i])
@@ -335,7 +308,7 @@ class ImageDataSet(Dataset):
 
                 # remove edges of the images
                 seg_small = input_segmented[crop_half:input_segmented.shape[0] - crop_half,
-                                            crop_half:input_segmented.shape[1] - crop_half]
+                            crop_half:input_segmented.shape[1] - crop_half]
 
                 # get unique values of this subset
                 unique, counts = np.unique(seg_small, return_counts=True)
@@ -565,9 +538,6 @@ class ImageDataSet(Dataset):
         augmentations8 = []
         """
 
-        # init variable so that pycharm is not complaining
-        gausso = None
-
         # these things are only for train
         if set_type == "train":
             if "noise" in aug_methods:
@@ -658,6 +628,6 @@ class OwnRandomSampler(Sampler):
         shuffled = torch.randperm(n, generator=generator)
 
         # order the list based on the random shuffled
-        shuffled_source = [_temp for _, _temp in sorted(zip(shuffled, self.data_source))] # noqa
+        shuffled_source = [_temp for _, _temp in sorted(zip(shuffled, self.data_source))]
 
         yield from shuffled_source

@@ -46,7 +46,7 @@ def segment(img, max_labels, max_segment_id):
 
     orig_dims = (img.shape[1], img.shape[0])
 
-    dim = (int(orig_dims[0] / 5), int(orig_dims[1] / 5))
+    dim = (int(orig_dims[1] / 5), int(orig_dims[0] / 5))
 
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 
