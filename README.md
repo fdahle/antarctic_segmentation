@@ -23,4 +23,4 @@ A small tool with a gui, that can be used to improve segmented imagery (for exam
 Work in progress!
 
 <h3>Background</h3>
-Many archives of historical grayscale aerial imagery is existing, however these images often contain no semantic information at all, which prevents their usage in computer-driven analysis. However, most modern semantic segmentation algorithms fail on these historical images, due to varying image quality, lack of color information, and most crucially, due to artifacts in both imaging as well as scanning (e.g. Newton’s rings)
+This semantic segmentation a part of [my](https://www.tudelft.nl/citg/over-faculteit/afdelingen/geoscience-remote-sensing/staff/phd-students/f-felix-dahle) PhD project. I am trying use historic imagery of the Antarctica to create 3D models with Structure From Motion. At this [repository](https://github.com/fdahle/Antarctic_TMA/) you can find more information about it (and more code). 
