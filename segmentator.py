@@ -35,10 +35,8 @@ segmentator_params = {
     "min_cluster_size": 50000,  # the minimum size of a cluster so that the cluster is not removed
     "scribble_size": 25,  # the initial size of the scribbler
     "small_image_size": 3000,
-    "path_images": "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/"
-                   "data/aerial/TMA/downloaded",  # path to the raw images
-    "path_segmented": "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/"
-                      "data/aerial/TMA/segmented"  # path to the unsupervised images
+    "path_images": "<Enter your path to the folder with the images>",  # path to the raw images
+    "path_segmented": "<Enter your path to the folder with the segmented images>"  # path to the unsupervised images
 }
 
 

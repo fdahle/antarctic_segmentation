@@ -190,13 +190,7 @@ def evaluate_model(json_name, json_folder, params):
 
 if __name__ == "__main__":
 
-    if model_folder == "default":
-        folder = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/" \
-                 "data/machine_learning/segmentation/UNET/models_new"
-    elif model_folder == "default_server":
-        folder = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/" \
-                 "data/machine_learning/segmentation/UNET/models_new"
-    else:
-        folder = model_folder
+    model_folder = "<Enter your path to the folder where the models should be stored>"
+    # usually the json files are located in the model folder
 
     evaluate_model(model_name, folder, evaluation_params)

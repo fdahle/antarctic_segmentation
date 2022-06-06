@@ -78,28 +78,19 @@ params_debugging = {
 
 bool_verbose = True
 
-if params_debugging["code_location"] == "server":
-    path_folder_images = "../../data/aerial/TMA/downloaded"
-    path_folder_segmented = "../../data/aerial/TMA/segmented/supervised"
-    path_folder_models = "../../data/machine_learning/segmentation/UNET/models_new"
-elif params_debugging["code_location"] == "local":
-    path_folder_images = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/aerial/TMA/downloaded"
-    path_folder_segmented = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/" \
-                            "aerial/TMA/segmented/supervised"
-    path_folder_models = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/" \
-                         "machine_learning/segmentation/UNET/models_new"
-else:
-    path_folder_images = None
-    path_folder_models = None
-    path_folder_segmented = None
-    print("Please specify the right code location")
-    exit()
+# the images and the segmentes images should have the same names
+path_folder_images = "<Enter your path to the folder with the images>"
+path_folder_segmented = "<Enter your path to the folder with the segmented images>"
+path_folder_models = "<Enter your path to the folder where the models should be stored>"
 
 db_type = "FILES"
 
 # it should be possible to call the function from arguments
 parser = argparse.ArgumentParser()
 
+parser.add_argument('--image_folder', metavar='image_folder', type=str, help='the path to the image folder')
+parser.add_argument('--segmented_folder', metavar='segmented_folder', type=str, help='the path to the segmented folder')
+parser.add_argument('--model_folder', metavar='model_folder', type=str, help='the path to the model folder')
 parser.add_argument('--model_name', metavar='model_name', type=str, help='the name of the model')
 parser.add_argument('--loss_type', metavar='loss_type', type=str, help='the loss used during training')
 parser.add_argument('--batch_size', metavar='batch_size', type=int, help='the batch size used during training')
@@ -109,6 +100,13 @@ parser.add_argument('--aug_method', metavar='aug_method', type=str, help="with w
 parser.add_argument('--bool_normalize', metavar="bool_normalize", type=str, help="should the data be normalized")
 
 args = parser.parse_args()
+
+if args.image_folder is not None:
+    path_folder_images = args.image_folder
+if args.segmented_folder is not None:
+    path_folder_segmented = args.segmented_folder
+if args.model_folder is not None:
+    path_folder_models = args.model_folder
 
 if args.model_name is not None:
     params_training["model_name"] = args.model_name
@@ -161,7 +159,7 @@ INPUT:
     params_train: Params for the training itself
     params_aug: Params if and how the images should be augmented
     params_debug: Params required during debugging
-    verbose: 
+    verbose:
 OUTPUT:
 """
 
@@ -1020,43 +1018,6 @@ if __name__ == "__main__":
         if image is None or segmented is None:
             print(f"Something went wrong with {img_id} and this image is skipped")
             continue
-
-        # correct ids
-        correct_ids = ["CA172032V0190", "CA183533R0058", "CA135632V0031",
-                       "CA184733R0095", "CA216733R0367", "CA179231L0038",
-                       "CA135433R0350", "CA216631L0328", "CA184432V0154",
-                       "CA184431L0143", "CA180031L0060", "CA213733R0050",
-                       "CA181331L0123", "CA184533R0238", "CA184532V0201",
-                       "CA184532V0219", "CA184432V0113", "CA181332V0125",
-                       "CA214832V0090", "CA182033R0051", "CA213731L0035",
-                       "CA216731L0333", "CA184432V0115"]
-
-        if img_id == "CA184532V0231":
-            temp = np.zeros((350, segmented.shape[1]))
-            temp[:, :] = 2
-            temp[:, 8677:] = 7
-            segmented = np.concatenate((segmented, temp), axis=0)
-            segmented = segmented.astype(int)
-
-        if img_id == "CA184532V0229":
-            temp = np.zeros((350, segmented.shape[1]))
-            temp[:, :] = 2
-            segmented = np.concatenate((segmented, temp), axis=0)
-            segmented = segmented.astype(int)
-
-        # TEMP WORKAROUND
-        if image.shape[0] == segmented.shape[0] - 350:
-            print("HI")
-            segmented = segmented[0:segmented.shape[0] - 350, :]
-
-        # if img_id not in correct_ids:
-        #    print(img_id)
-        #    import display_multiple_images as dmi # noqa
-        #    dmi.display_multiple_images([image, segmented])
-
-        # if img_id == "CA184532V0229":
-        #    import display_multiple_images as dmi
-        #    dmi.display_multiple_images([image, segmented])
 
         # images must have the same shape, otherwise the model fails
         assert image.shape == segmented.shape, \

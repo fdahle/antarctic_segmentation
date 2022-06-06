@@ -13,7 +13,7 @@ This function applied a segmentation model on unseen images and displays the res
 provided id will be selected.
 
 INPUT:
-    select_type (String): Should random images be segmented ('random') or specific images ('ids') 
+    select_type (String): Should random images be segmented ('random') or specific images ('ids')
     path_model (String): The path where the model is located
     model_id (String): The name of the *.pt or *.pth file
     path_folder_images (String): The path where the images are located
@@ -28,9 +28,8 @@ select_type = "random"  # can be random or id
 num_images = 10  # must be filled if select_type is 'random'
 image_ids = []  # must be filled with ids if select_type is 'id'
 
-path_folder_images = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/aerial/TMA/downloaded"
-#path_model = "/home/fdahle/SFTP/staff-umbrella/ATM/data/machine_learning/segmentation/UNET/models_new"
-path_model = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/machine_learning/segmentation/UNET/models"
+path_folder_images = "<Enter your path to the folder with the images>"
+path_folder_models = "<Enter your path to the folder where the models should be stored>"
 model_id = "training_resized_all_4"
 
 
@@ -54,4 +53,4 @@ def apply_model(select_type, path_model, model_id, path_folder_images, num_image
 
 
 if __name__ == "__main__":
-    apply_model(select_type, path_model, model_id, path_folder_images, num_images, image_ids)
+    apply_model(select_type, path_folder_models, model_id, path_folder_images, num_images, image_ids)
