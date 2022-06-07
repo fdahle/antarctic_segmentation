@@ -7,20 +7,24 @@ The images used in this project are [publicly available](https://www.pgc.umn.edu
 
 <h3>Technical information</h3>
 
-Note that in the currenet state the code is very specific for my project and cannot be use from others without adaptions. In near future this code will be changed to make it more usable by the public.
+There are four important main functions in this repository:
 
-There are three important main functions in this repository:
-
-- train_model.py:
-This function is loading the data/model and initizalizing the training.
+- apply_model.py:
+In this function the model can be applied and visualized on unseen imagery.
 
 - evaluate_model.py:
-With this code a created model can be evaluated.
+With this function a created model can be evaluated.
 
 - segmentator.py:
 A small tool with a gui, that can be used to improve segmented imagery (for example created by unsupervised segmentation). 
 
-Work in progress!
+- train_model.py:
+This function is loading the data and initizalizing the training to create the models.
+
+Even though this code is suited especially for my needs and my dataset, it is possible to adapt the code for your needs:
+- Change the folder paths to the images and the labels. These are specified at the begin of each of the four main functions.
+- Change your training parameters in train_params.py (E.g. model name, number of epochs, number of classes, etc..)
+
 
 <h3>Background</h3>
 
