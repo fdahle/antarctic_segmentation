@@ -30,7 +30,7 @@ image_ids = []  # must be filled with ids if select_type is 'id'
 
 path_folder_images = "<Enter your path to the folder with the images>"
 path_folder_models = "<Enter your path to the folder where the models should be stored>"
-model_id = "training_resized_all_4"
+model_id = "<Your model _id>"
 
 
 def apply_model(select_type, path_model, model_id, path_folder_images, num_images=0, image_ids=[]):
