@@ -3,10 +3,9 @@ import numpy as np
 
 import load_data_from_json as ldfj
 
-model_name = "test_resize_dropout_small"
-model_folder = "default"  # can be default or default_server
+model_name = "<Your model id>"
+model_folder = "<Enter your path to the folder where the models should be stored>"
 
-evaluation_save_path = ""
 evaluation_params = {
     "show_train": True,
     "show_val": True,
@@ -190,7 +189,5 @@ def evaluate_model(json_name, json_folder, params):
 
 if __name__ == "__main__":
 
-    model_folder = "<Enter your path to the folder where the models should be stored>"
-    # usually the json files are located in the model folder
 
     evaluate_model(model_name, folder, evaluation_params)

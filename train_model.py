@@ -38,7 +38,7 @@ from classes.image_data_set import ImageDataSet
 
 # training params
 params_training = {
-    "model_name": "test_resize_dropout_small_256",
+    "model_name": "<Your model name>",
     "max_epochs": 10000,  # how many epochs should maximal be trained
     "learning_rate": 0.001,  # how fast should the model learn
     "early_stopping": 0,  # when to stop when there's no improvement; 0 disables early stopping
