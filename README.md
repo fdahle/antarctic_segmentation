@@ -23,4 +23,5 @@ A small tool with a gui, that can be used to improve segmented imagery (for exam
 Work in progress!
 
 <h3>Background</h3>
+
 This semantic segmentation is a part of [my](https://www.tudelft.nl/citg/over-faculteit/afdelingen/geoscience-remote-sensing/staff/phd-students/f-felix-dahle) PhD project. I am trying use historic imagery of the Antarctica to create 3D models with Structure From Motion. At this [repository](https://github.com/fdahle/Antarctic_TMA/) you can find more information about it (and more code). 
