@@ -39,6 +39,7 @@ from classes.image_data_set import ImageDataSet
 # training params
 params_training = {
     "model_name": "<Your model name>",
+    "small_model": True,
     "max_epochs": 10000,  # how many epochs should maximal be trained
     "learning_rate": 0.001,  # how fast should the model learn
     "early_stopping": 0,  # when to stop when there's no improvement; 0 disables early stopping
@@ -190,11 +191,18 @@ def train_model(input_images, input_labels, params_train,
     # initialize the model
     if verbose:
         print("Initialize model")
-    unet = UNET_SMALL(
-        params_train["input_layers"],
-        params_train["output_layers"],
-        params_train["kernel_size"]
-    )
+    if params_train["small_model"]:
+        unet = UNET_SMALL(
+            params_train["input_layers"],
+            params_train["output_layers"],
+            params_train["kernel_size"]
+        )
+    else:
+        unet = UNET(
+            params_train["input_layers"],
+            params_train["output_layers"],
+            params_train["kernel_size"]
+        )
     unet = unet.to(device)
 
     if params_debug["print_times"]:
