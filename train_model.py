@@ -39,27 +39,27 @@ from classes.image_data_set import ImageDataSet
 # training params
 params_training = {
     "model_name": "<Your model name>",
-    "small_model": True,
-    "max_epochs": 10000,  # how many epochs should maximal be trained
+    "model_type": "normal",
+    "max_epochs": 2500,  # how many epochs should maximal be trained
     "learning_rate": 0.001,  # how fast should the model learn
     "early_stopping": 0,  # when to stop when there's no improvement; 0 disables early stopping
     "loss_type": "cross_entropy",  # define which loss type should be used ("cross_entropy", "ssim")
     "input_layers": 1,  # just the grayscale, add more if anything else is added e.g. dem
     "output_layers": 6,  # equals the number of classes
     "kernel_size": 3,  # how big is the cnn kernel
-    "batch_size": 16,  # how many images per batch
+    "batch_size": 4,  # how many images per batch
     "percentages": [80, 20, 0],  # how many images per training, validation and test (in percentage),
     "ignore_classes": [0, 7],  # which classes should be ignored (for weights, loss and cropping)
     "save_step": 1,  # after how many steps should the model be saved
     "seed": 123,  # random seed to enable reproducibility
     "device": 'gpu',  # can be ["auto", "cpu", "gpu"]
     "num_workers": 2,  # with how many parallel process should the data be loaded,
-    "bool_continue_training": False,  # if this is true the model_name must already exist (at least the .json-file)
+    "bool_continue_training": True,  # if this is true the model_name must already exist (at least the .json-file)
 }
 
 params_augmentation = {
-    "methods": ["resized", "flipped", "rotation", "brightness", "noise"],  # "normalize"],
-    "aug_size": 256,  # can be for "resized" or "cropped"
+    "methods": ["resized", "flipped", "rotation", "brightness", "noise",  "normalize"],
+    "aug_size": 1024,  # can be for "resized" or "cropped"
     "crop_type": "inverted",
     "crop_numbers": 16,  # how many random crops are extracted from an image at training?
 }
@@ -68,7 +68,6 @@ params_augmentation = {
 params_debugging = {
     "max_images": None,  # put None if you want to load all images
     "bool_save": True,
-    "code_location": "local",  # can be server or local
     "fraction": 3,  # how much should be rounded when displaying or saving stats,
     "print_times": True,
     "additional_checks": False,
@@ -79,12 +78,36 @@ params_debugging = {
 
 bool_verbose = True
 
-# the images and the segmentes images should have the same names
 path_folder_images = "<Enter your path to the folder with the images>"
 path_folder_segmented = "<Enter your path to the folder with the segmented images>"
 path_folder_models = "<Enter your path to the folder where the models should be stored>"
 
+else:
+    path_folder_images = None
+    path_folder_models = None
+    path_folder_segmented = None
+    print("Please specify the right code location")
+    exit()
+
 db_type = "FILES"
+
+# if we continue the training, we should load the params from the param.json
+if params_training["bool_continue_training"]:
+    json_path = path_folder_models + "/" + params_training["model_name"] + ".json"
+    json_dict = ldfj.load_data_from_json(json_path)
+
+    old_params_training = json_dict["params_training"]
+    old_params_augmentation = json_dict["params_augmentation"]
+    old_params_dataset = json_dict["dataset_params"]
+
+    for key in ["learning_rate", "early_stopping", "loss_type", "input_layers", "output_layers", "kernel_size",
+                "batch_size", "percentages", "ignore_classes", "save_step", "device", "num_workers"]:
+        params_training[key] = old_params_training[key]
+
+    for key in ["methods", "aug_size", "crop_type", "crop_numbers"]:
+        params_augmentation[key] = old_params_augmentation["training_1"][key]
+
+    print("Information loaded from JSON")
 
 # it should be possible to call the function from arguments
 parser = argparse.ArgumentParser()
@@ -108,7 +131,6 @@ if args.segmented_folder is not None:
     path_folder_segmented = args.segmented_folder
 if args.model_folder is not None:
     path_folder_models = args.model_folder
-
 if args.model_name is not None:
     params_training["model_name"] = args.model_name
 if args.loss_type is not None:
@@ -127,7 +149,7 @@ if args.aug_method is not None:
     if args.aug_method == "resized":
         params_augmentation["methods"][0] = "resized"
         params_augmentation["aug_size"] = 1024
-    elif args.aug_mehthod == "cropped":
+    elif args.aug_method == "cropped":
         params_augmentation["methods"][0] = "cropped"
         params_augmentation["aug_size"] = 512
     else:
@@ -191,18 +213,21 @@ def train_model(input_images, input_labels, params_train,
     # initialize the model
     if verbose:
         print("Initialize model")
-    if params_train["small_model"]:
-        unet = UNET_SMALL(
-            params_train["input_layers"],
-            params_train["output_layers"],
-            params_train["kernel_size"]
-        )
-    else:
+    if params_train["model_type"] == "normal":
         unet = UNET(
             params_train["input_layers"],
             params_train["output_layers"],
             params_train["kernel_size"]
         )
+        print("normal model is loaded")
+    elif params_train["model_type"] == "small":
+        unet = UNET_SMALL(
+            params_train["input_layers"],
+            params_train["output_layers"],
+            params_train["kernel_size"]
+        )
+        print("small model is loaded")
+
     unet = unet.to(device)
 
     if params_debug["print_times"]:
@@ -396,7 +421,10 @@ def train_model(input_images, input_labels, params_train,
 
             ssim_module = SSIM(data_range=input_params_train["output_layers"], size_average=True, channel=1)
             loss = 1 - ssim_module(y_argmax_expanded, y_true_expanded)
-
+        elif input_params_train["loss_type"] == "focal":
+            pass
+        elif input_params_train["loss_type"] == "dice":
+            pass
         else:
             loss = None
             print("A wrong loss was set. Please select a different loss type")
@@ -825,8 +853,16 @@ def train_model(input_images, input_labels, params_train,
 
         training_iteration = "training_" + str(_training_number)
 
+        # over 24h -> we need to convert days to hours
+        if "day" in _time_from_previous_training:
+            nr_of_days = _time_from_previous_training.split(",")[0].split(" ")[0]
+            extra_hours = int(nr_of_days) * 24
+            _time_from_previous_training = _time_from_previous_training.split(",")[1]
+        else:
+            extra_hours = 0
+
         # convert the time from the previous dicts to timedelta
-        hours = int(_time_from_previous_training.split(":")[0])
+        hours = int(_time_from_previous_training.split(":")[0]) + int(extra_hours)
         minutes = int(_time_from_previous_training.split(":")[1])
         seconds = float(_time_from_previous_training.split(":")[2])
         previous_time_delta = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
