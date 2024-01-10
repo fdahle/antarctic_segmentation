@@ -9,8 +9,7 @@ This repository contains the code for applying semantic segmentation on historic
 The images used in this project are [publicly available](https://www.pgc.umn.edu/data/aerial/) and can be downloaded [here](https://data.pgc.umn.edu/aerial/usgs/tma/photos/).
 
 <h3>Datasets</h3>
-Due to file size limitation, the training data and the segmented data of Adelaide Island are not on github. Instead, they can be downloaded from [here](https://doi.org/10.4121/de8ea9d4-f986-41fc-9412-6765985a0c9c.v1).
-
+Due to file size limitation, the training data and the segmented data of Adelaide Island are not on github. Instead, they can be downloaded at https://doi.org/10.4121/de8ea9d4-f986-41fc-9412-6765985a0c9c.
 <h3>Technical information</h3>
 
 There are four important main functions in this repository:
