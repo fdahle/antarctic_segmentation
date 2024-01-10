@@ -1,5 +1,8 @@
 # Antarctic segmentation
-This repository contains the code for applying semantic segmentation on historical cryospheric imagery. For more information see the [ISPRS](https://www.isprs2022-nice.com/) paper <b>Semantic segmentation of historical photographs of the Antarctic Peninsula</b> (download [here](https://www.isprs-ann-photogramm-remote-sens-spatial-inf-sci.net/V-2-2022/237/2022/)).
+This repository contains the code for applying semantic segmentation on historical cryospheric imagery. For more information see the 
+- [ISPRS Open Journal of Photogrammetry and Remote Sensing](https://www.sciencedirect.com/journal/isprs-open-journal-of-photogrammetry-and-remote-sensing) paper <b>Revisiting the Past: A comparative study for semantic segmentation of historical images of Adelaide Island using U-nets</b> (download [here](https://www.sciencedirect.com/science/article/pii/S2667393223000273))
+
+- [ISPRS](https://www.isprs2022-nice.com/) paper <b>Semantic segmentation of historical photographs of the Antarctic Peninsula</b> (download [here](https://www.isprs-ann-photogramm-remote-sens-spatial-inf-sci.net/V-2-2022/237/2022/)).
 
 ![Example for segmentation](https://github.com/fdahle/antarctic_segmentation/blob/main/readme/segmentation_example.png?raw=true)
 

@@ -24,13 +24,13 @@ workdir = str(pathlib.Path().resolve())[:-4]
 sys.path.append(workdir + "/base_functions")
 sys.path.append(workdir + "/display_functions")
 
-import get_ids_from_folder as giff
-import load_image_from_file as liff
-import cut_off_edge as coe
-import load_data_from_json as ldfj
+import base_functions.get_ids_from_folder as giff
+import base.load_image_from_file as liff
+import base.remove_borders as rb
+import base_functions.load_data_from_json as ldfj
 
-import display_segmented as ds
-import display_unet_subsets as dus
+#import display.display_segmented as ds
+#import display.display_unet_subsets as dus
 
 from classes.u_net import UNET
 from classes.u_net_small import UNET_SMALL
@@ -40,7 +40,7 @@ from classes.image_data_set import ImageDataSet
 params_training = {
     "model_name": "<Your model name>",
     "model_type": "normal",
-    "max_epochs": 2500,  # how many epochs should maximal be trained
+    "max_epochs": 500,  # how many epochs should maximal be trained
     "learning_rate": 0.001,  # how fast should the model learn
     "early_stopping": 0,  # when to stop when there's no improvement; 0 disables early stopping
     "loss_type": "cross_entropy",  # define which loss type should be used ("cross_entropy", "ssim")
@@ -54,12 +54,12 @@ params_training = {
     "seed": 123,  # random seed to enable reproducibility
     "device": 'gpu',  # can be ["auto", "cpu", "gpu"]
     "num_workers": 2,  # with how many parallel process should the data be loaded,
-    "bool_continue_training": True,  # if this is true the model_name must already exist (at least the .json-file)
+    "bool_continue_training": False,  # if this is true the model_name must already exist (at least the .json-file)
 }
 
 params_augmentation = {
-    "methods": ["resized", "flipped", "rotation", "brightness", "noise",  "normalize"],
-    "aug_size": 1024,  # can be for "resized" or "cropped"
+    "methods": ["resized", "flipped", "brightness", "noise",  "normalize"],
+    "aug_size": 1200,  # can be for "resized" or "cropped"
     "crop_type": "inverted",
     "crop_numbers": 16,  # how many random crops are extracted from an image at training?
 }
@@ -325,9 +325,12 @@ def train_model(input_images, input_labels, params_train,
 
     # define what should be saved
     saving_for = ["train", "val"]
-    epoch_values = ["loss", "acc", "f1", "kappa"]
+    epoch_values = ["loss", "acc", "precision", "recall", "f1",
+                    "precision_class", "recall_class", "f1_class", "kappa"]
     best_values = ["best_loss_value", "best_loss_epoch",
                    "best_acc_value", "best_acc_epoch",
+                   "best_precision_value", "best_precision_epoch",
+                   "best_recall_value", "best_recall_epoch",
                    "best_f1_value", "best_f1_epoch",
                    "best_kappa_value", "best_kappa_epoch"]
 
@@ -432,7 +435,7 @@ def train_model(input_images, input_labels, params_train,
 
         return loss
 
-    def calc_val(val_type, y_pred, y_true, input_weights):
+    def calc_val(val_type, y_pred, y_true, input_weights, per_class=False):
 
         np_y_pred = y_pred.cpu().detach().numpy().flatten()
         np_y_true = y_true.cpu().detach().numpy().flatten()
@@ -443,6 +446,8 @@ def train_model(input_images, input_labels, params_train,
         for i, elem in enumerate(np_weights):
             weight_matrix[weight_matrix == i] = elem
 
+        average_type = 'weighted' if not per_class else None
+
         if val_type == "accuracy":
 
             with warnings.catch_warnings():
@@ -452,12 +457,30 @@ def train_model(input_images, input_labels, params_train,
 
             return accuracy
 
+        elif val_type == "precision":
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore")
+
+                precision = sm.precision_score(np_y_true, np_y_pred, average=average_type, sample_weight=weight_matrix)
+
+            return precision
+
+        elif val_type == "recall":
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore")
+
+                recall = sm.recall_score(np_y_true, np_y_pred, average=average_type, sample_weight=weight_matrix)
+
+            return recall
+
         elif val_type == "f1":
 
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore")
 
-                f1 = sm.f1_score(np_y_true, np_y_pred, average="weighted", sample_weight=weight_matrix)
+                f1 = sm.f1_score(np_y_true, np_y_pred, average=average_type, sample_weight=weight_matrix)
 
             return f1
 
@@ -484,7 +507,12 @@ def train_model(input_images, input_labels, params_train,
         # save loss and acc per batch to calculate the avg
         train_loss_batch = []
         train_acc_batch = []
+        train_precision_batch = []
+        train_recall_batch = []
         train_f1_batch = []
+        train_precision_class_batch = []
+        train_recall_class_batch = []
+        train_f1_class_batch = []
         train_kappa_batch = []
 
         batch_step = 0
@@ -515,7 +543,7 @@ def train_model(input_images, input_labels, params_train,
 
                 if params_debug["display_subset_images_training"]:
                     normalized = "normalize" in params_aug["methods"]
-                    dus.display_unet_subsets(subset_x, subset_y, normalized, "Training")
+                    #dus.display_unet_subsets(subset_x, subset_y, normalized, "Training")
 
                 # data to gpu
                 subset_x = subset_x.to(device)
@@ -527,10 +555,15 @@ def train_model(input_images, input_labels, params_train,
                 # get the max prediction for every cell
                 subset_pred_max = torch.argmax(subset_pred, dim=1)
 
-                # get loss, accuracy, f1 and kappa
+                # get loss, accuracy, precision, recall, f1 and kappa
                 loss_for_subset = calc_loss(subset_pred, subset_y, train_params, input_weights)
                 accuracy_for_subset = calc_val("accuracy", subset_pred_max, subset_y, input_weights)
+                precision_for_subset = calc_val("precision", subset_pred_max, subset_y, input_weights)
+                recall_for_subset = calc_val("recall", subset_pred_max, subset_y, input_weights)
                 f1_for_subset = calc_val("f1", subset_pred_max, subset_y, input_weights)
+                precision_class_for_subset = calc_val("precision", subset_pred_max, subset_y, input_weights, per_class=True)
+                recall_class_for_subset = calc_val("recall", subset_pred_max, subset_y, input_weights, per_class=True)
+                f1_class_for_subset = calc_val("f1", subset_pred_max, subset_y, input_weights, per_class=True)
                 kappa_for_subset = calc_val("kappa", subset_pred_max, subset_y, input_weights)
 
                 if train_params["loss_type"] == "ssim":
@@ -543,14 +576,20 @@ def train_model(input_images, input_labels, params_train,
                 # make the tensors to normal values
                 loss_for_subset = loss_for_subset.cpu().detach().item()
 
-                return loss_for_subset, accuracy_for_subset, f1_for_subset, kappa_for_subset
+                return loss_for_subset, accuracy_for_subset, precision_for_subset, recall_for_subset, f1_for_subset, \
+                       precision_class_for_subset, recall_class_for_subset, f1_class_for_subset, kappa_for_subset
 
             # if now stuff is bigger than batch-size we need another loop
             if train_x.shape[0] > train_params["batch_size"]:
 
                 subset_losses = []
                 subset_accuracies = []
+                subset_precision_scores = []
+                subset_recall_scores = []
                 subset_f1_scores = []
+                subset_precision_class_scores = []
+                subset_recall_class_scores = []
+                subset_f1_class_scores = []
                 subset_kappa_scores = []
 
                 for i in range(0, train_x.shape[0], train_params["batch_size"]):
@@ -564,20 +603,28 @@ def train_model(input_images, input_labels, params_train,
                     train_x_subset = train_x[subset_min:subset_max, :, :, :]
                     train_y_subset = train_y[subset_min:subset_max, :, :]
 
-                    subset_loss, subset_acc, subset_f1, subset_kappa = train_subset(train_x_subset, train_y_subset)
+                    subset_loss, subset_acc, subset_precision, subset_recall, subset_f1, \
+                    subset_precision_class, subset_recall_class, subset_f1_class, subset_kappa = train_subset(train_x_subset, train_y_subset)
 
                     subset_losses.append(subset_loss)
                     subset_accuracies.append(subset_acc)
+                    subset_precision_scores.append(subset_precision)
+                    subset_recall_scores.append(subset_recall)
                     subset_f1_scores.append(subset_f1)
+                    subset_precision_class_scores.append(subset_precision_class)
+                    subset_recall_class_scores.append(subset_recall_class)
+                    subset_f1_class_scores.append(subset_f1_class)
                     subset_kappa_scores.append(subset_kappa)
 
                     # print the statistics of one subset
                     if verbose:
-                        print('    Current subset: {} - Loss: {} - Acc: {} - F1: {} - Kappa: {} - AllocMem (Mb): {}'.
+                        print('    Current subset: {} - Loss: {} - Acc: {} - Precision: {} - Recall: {} - F1: {} - Kappa: {} - AllocMem (Mb): {}'.
                               format(
                                     batch_step,
                                     round(subset_loss, params_debug["fraction"]),
                                     round(subset_acc, params_debug["fraction"]),
+                                    round(subset_precision, params_debug["fraction"]),
+                                    round(subset_recall, params_debug["fraction"]),
                                     round(subset_f1, params_debug["fraction"]),
                                     round(subset_kappa, params_debug["fraction"]),
                                     round(torch.cuda.memory_allocated() / 1024 / 1024, 4)
@@ -585,25 +632,38 @@ def train_model(input_images, input_labels, params_train,
 
                 train_loss = np.mean(subset_losses)
                 train_accuracy = np.mean(subset_accuracies)
+                train_precision = np.mean(subset_precision_scores)
+                train_recall = np.mean(subset_recall_scores)
                 train_f1 = np.mean(subset_f1_scores)
+                train_precision_class = np.mean(subset_precision_class_scores, axis=1)
+                train_recall_class = np.mean(subset_recall_class_scores, axis=1)
+                train_f1_class = np.mean(subset_f1_class_scores, axis=1)
                 train_kappa = np.mean(subset_kappa_scores)
             else:
-                train_loss, train_accuracy, train_f1, train_kappa = train_subset(train_x, train_y)
+                train_loss, train_accuracy, train_precision, train_recall, train_f1, \
+                train_precision_class, train_recall_class, train_f1_class, train_kappa = train_subset(train_x, train_y)
 
             # save loss and acc of one batch
             train_loss_batch.append(train_loss)
             train_acc_batch.append(train_accuracy)
+            train_precision_batch.append(train_precision)
+            train_recall_batch.append(train_recall)
             train_f1_batch.append(train_f1)
+            train_precision_class_batch.append(train_precision_class)
+            train_recall_class_batch.append(train_recall_class)
+            train_f1_class_batch.append(train_f1_class)
             train_kappa_batch.append(train_kappa)
 
             one_batch_duration = datetime.datetime.now() - batch_start
 
             # print the statistics of one batch
             if verbose:
-                print('  Current batch: {} - Loss: {} - Acc: {} - F1: {} - Kappa: {} - AllocMem (Mb): {} ({})'.format(
+                print('  Current batch: {} - Loss: {} - Acc: {} - Precision: {} - Recall: {} - F1: {} - Kappa: {} - AllocMem (Mb): {} ({})'.format(
                     batch_step,
                     round(train_loss, params_debug["fraction"]),
                     round(train_accuracy, params_debug["fraction"]),
+                    round(train_precision, params_debug["fraction"]),
+                    round(train_recall, params_debug["fraction"]),
                     round(train_f1, params_debug["fraction"]),
                     round(train_kappa, params_debug["fraction"]),
                     round(torch.cuda.memory_allocated() / 1024 / 1024, 4),
@@ -613,7 +673,12 @@ def train_model(input_images, input_labels, params_train,
         # calculate the avg
         epoch_avg_statistics["avg_train_loss"] = sum(train_loss_batch) / len(train_loss_batch)
         epoch_avg_statistics["avg_train_acc"] = sum(train_acc_batch) / len(train_acc_batch)
+        epoch_avg_statistics["avg_train_precision"] = sum(train_precision_batch) / len(train_precision_batch)
+        epoch_avg_statistics["avg_train_recall"] = sum(train_recall_batch) / len(train_recall_batch)
         epoch_avg_statistics["avg_train_f1"] = sum(train_f1_batch) / len(train_f1_batch)
+        epoch_avg_statistics["avg_train_precision_class"] = np.mean(train_precision_class_batch, axis=0)
+        epoch_avg_statistics["avg_train_recall_class"] = np.mean(train_recall_class_batch, axis=0)
+        epoch_avg_statistics["avg_train_f1_class"] = np.mean(train_f1_class_batch, axis=0)
         epoch_avg_statistics["avg_train_kappa"] = sum(train_kappa_batch) / len(train_kappa_batch)
 
         one_epoch_duration = datetime.datetime.now() - epoch_start
@@ -622,10 +687,13 @@ def train_model(input_images, input_labels, params_train,
         # print the statistics of one complete epoch
         if verbose:
             print(' Current epoch: {} - avg. train Loss: {} - avg. train Acc: {} - '
+                  'avg. train Precision: {} - avg. train Recall: {} - '
                   'avg. train F1: {} - avg. train Kappa: {} ({})'.format(
                     epoch,
                     round(epoch_avg_statistics["avg_train_loss"], params_debug["fraction"]),
                     round(epoch_avg_statistics["avg_train_acc"], params_debug["fraction"]),
+                    round(epoch_avg_statistics["avg_train_precision"], params_debug["fraction"]),
+                    round(epoch_avg_statistics["avg_train_recall"], params_debug["fraction"]),
                     round(epoch_avg_statistics["avg_train_f1"], params_debug["fraction"]),
                     round(epoch_avg_statistics["avg_train_kappa"], params_debug["fraction"]),
                     one_epoch_duration
@@ -638,7 +706,12 @@ def train_model(input_images, input_labels, params_train,
         # save loss and acc per batch to calculate the avg
         val_loss_batch = []
         val_acc_batch = []
+        val_precision_batch = []
+        val_recall_batch = []
         val_f1_batch = []
+        val_precision_class_batch = []
+        val_recall_class_batch = []
+        val_f1_class_batch = []
         val_kappa_batch = []
 
         batch_step = 0
@@ -667,7 +740,7 @@ def train_model(input_images, input_labels, params_train,
 
                     if params_debug["display_subset_images_validation"]:
                         normalized = "normalize" in params_aug["methods"]
-                        dus.display_unet_subsets(subset_x, subset_y, normalized, "Validation")
+                        #dus.display_unet_subsets(subset_x, subset_y, normalized, "Validation")
 
                     # data to gpu
                     subset_x = subset_x.to(device)
@@ -682,20 +755,31 @@ def train_model(input_images, input_labels, params_train,
                     # get loss, accuracy
                     loss_for_subset = calc_loss(subset_pred, subset_y, train_params, input_weights)
                     accuracy_for_subset = calc_val("accuracy", subset_pred_max, subset_y, input_weights)
+                    precision_for_subset = calc_val("precision", subset_pred_max, subset_y, input_weights)
+                    recall_for_subset = calc_val("recall", subset_pred_max, subset_y, input_weights)
                     f1_for_subset = calc_val("f1", subset_pred_max, subset_y, input_weights)
+                    precision_class_for_subset = calc_val("precision", subset_pred_max, subset_y, input_weights, per_class=True)
+                    recall_class_for_subset = calc_val("recall", subset_pred_max, subset_y, input_weights, per_class=True)
+                    f1_class_for_subset = calc_val("f1", subset_pred_max, subset_y, input_weights, per_class=True)
                     kappa_for_subset = calc_val("kappa", subset_pred_max, subset_y, input_weights)
 
                     # make the tensors to normal values
                     loss_for_subset = loss_for_subset.cpu().detach().item()
 
-                    return loss_for_subset, accuracy_for_subset, f1_for_subset, kappa_for_subset
+                    return loss_for_subset, accuracy_for_subset, precision_for_subset, recall_for_subset, f1_for_subset,\
+                           precision_class_for_subset, recall_class_for_subset, f1_class_for_subset, kappa_for_subset
 
                 # if now stuff is bigger than batch-size we need another loop
                 if val_x.shape[0] > train_params["batch_size"]:
 
                     subset_losses = []
                     subset_accuracies = []
+                    subset_precision_scores = []
+                    subset_recall_scores = []
                     subset_f1_scores = []
+                    subset_precision_class_scores = []
+                    subset_recall_class_scores = []
+                    subset_f1_class_scores = []
                     subset_kappa_scores = []
 
                     for i in range(0, val_x.shape[0], train_params["batch_size"]):
@@ -708,11 +792,17 @@ def train_model(input_images, input_labels, params_train,
                         val_x_subset = val_x[subset_min:subset_max, :, :, :]
                         val_y_subset = val_y[subset_min:subset_max, :, :]
 
-                        subset_loss, subset_acc, subset_f1, subset_kappa = val_subset(val_x_subset, val_y_subset)
+                        subset_loss, subset_acc, subset_precision, subset_recall, subset_f1, \
+                        subset_precision_class, subset_recall_class, subset_f1_class, subset_kappa = val_subset(val_x_subset, val_y_subset)
 
                         subset_losses.append(subset_loss)
                         subset_accuracies.append(subset_acc)
+                        subset_precision_scores.append(subset_precision)
+                        subset_recall_scores.append(subset_recall)
                         subset_f1_scores.append(subset_f1)
+                        subset_precision_class_scores.append(subset_precision_class)
+                        subset_recall_class_scores.append(subset_recall_class)
+                        subset_f1_class_scores.append(subset_f1_class)
                         subset_kappa_scores.append(subset_kappa)
 
                         one_batch_duration = datetime.datetime.now() - batch_start
@@ -720,11 +810,13 @@ def train_model(input_images, input_labels, params_train,
                         # print the statistics of one batch
                         if verbose:
                             print(
-                                '    Current subset: {} - Loss: {} - Acc: {} - '
+                                '    Current subset: {} - Loss: {} - Acc: {} - Precision: {} - Recall: {} - '
                                 'F1: {} - Kappa: {} - AllocMem (Mb): {} ({})'.format(
                                     batch_step,
                                     round(subset_loss, params_debug["fraction"]),
                                     round(subset_acc, params_debug["fraction"]),
+                                    round(subset_precision, params_debug["fraction"]),
+                                    round(subset_recall, params_debug["fraction"]),
                                     round(subset_f1, params_debug["fraction"]),
                                     round(subset_kappa, params_debug["fraction"]),
                                     round(torch.cuda.memory_allocated() / 1024 / 1024, 4),
@@ -733,23 +825,36 @@ def train_model(input_images, input_labels, params_train,
 
                     val_loss = np.mean(subset_losses)
                     val_accuracy = np.mean(subset_accuracies)
+                    val_precision = np.mean(subset_precision_scores)
+                    val_recall = np.mean(subset_recall_scores)
                     val_f1 = np.mean(subset_f1_scores)
+                    val_precision_class = np.mean(subset_precision_scores)
+                    val_recall_class = np.mean(subset_recall_scores)
+                    val_f1_class = np.mean(subset_f1_scores)
                     val_kappa = np.mean(subset_kappa_scores)
                 else:
-                    val_loss, val_accuracy, val_f1, val_kappa = val_subset(val_x, val_y)
+                    val_loss, val_accuracy, val_precision, val_recall, val_f1, \
+                    val_precision_class, val_recall_class, val_f1_class, val_kappa = val_subset(val_x, val_y)
 
                 # save loss and acc of one batch
                 val_loss_batch.append(val_loss)
                 val_acc_batch.append(val_accuracy)
+                val_precision_batch.append(val_precision)
+                val_recall_batch.append(val_recall)
                 val_f1_batch.append(val_f1)
+                val_precision_class_batch.append(val_precision_class)
+                val_recall_class_batch.append(val_recall_class)
+                val_f1_class_batch.append(val_f1_class)
                 val_kappa_batch.append(val_kappa)
 
                 # print the statistics of one batch
                 if verbose:
-                    print('  Current batch: {} - Loss: {} - Acc: {} - F1: {} - Kappa: {} - AllocMem (Mb): {}'.format(
+                    print('  Current batch: {} - Loss: {} - Acc: {} - Precision: {} - Recall: {} - F1: {} - Kappa: {} - AllocMem (Mb): {}'.format(
                         batch_step,
                         round(val_loss, params_debug["fraction"]),
                         round(val_accuracy, params_debug["fraction"]),
+                        round(val_precision, params_debug["fraction"]),
+                        round(val_recall, params_debug["fraction"]),
                         round(val_f1, params_debug["fraction"]),
                         round(val_kappa, params_debug["fraction"]),
                         round(torch.cuda.memory_allocated() / 1024 / 1024, 4)
@@ -758,7 +863,12 @@ def train_model(input_images, input_labels, params_train,
         # calculate the avg
         epoch_avg_statistics["avg_val_loss"] = sum(val_loss_batch) / len(val_loss_batch)
         epoch_avg_statistics["avg_val_acc"] = sum(val_acc_batch) / len(val_acc_batch)
+        epoch_avg_statistics["avg_val_precision"] = sum(val_precision_batch) / len(val_precision_batch)
+        epoch_avg_statistics["avg_val_recall"] = sum(val_recall_batch) / len(val_recall_batch)
         epoch_avg_statistics["avg_val_f1"] = sum(val_f1_batch) / len(val_f1_batch)
+        epoch_avg_statistics["avg_val_precision_class"] = np.mean(val_precision_class_batch, axis=0)
+        epoch_avg_statistics["avg_val_recall_class"] = np.mean(val_recall_class_batch, axis=0)
+        epoch_avg_statistics["avg_val_f1_class"] = np.mean(val_f1_class_batch, axis=0)
         epoch_avg_statistics["avg_val_kappa"] = sum(val_kappa_batch) / len(val_kappa_batch)
 
         one_epoch_duration = datetime.datetime.now() - epoch_intermediate
@@ -766,10 +876,13 @@ def train_model(input_images, input_labels, params_train,
         # print the statistics of one complete epoch
         if verbose:
             print(' Current epoch: {} - avg. val Loss: {} - avg. val Acc: {} - '
+                  'avg. val Precision: {} - avg. val Recall: {} - '
                   'avg. val F1: {} - avg. val Kappa: {} - ({})'.format(
                     epoch,
                     round(epoch_avg_statistics["avg_val_loss"], params_debug["fraction"]),
                     round(epoch_avg_statistics["avg_val_acc"], params_debug["fraction"]),
+                    round(epoch_avg_statistics["avg_val_precision"], params_debug["fraction"]),
+                    round(epoch_avg_statistics["avg_val_recall"], params_debug["fraction"]),
                     round(epoch_avg_statistics["avg_val_f1"], params_debug["fraction"]),
                     round(epoch_avg_statistics["avg_val_kappa"], params_debug["fraction"]),
                     one_epoch_duration
@@ -787,11 +900,22 @@ def train_model(input_images, input_labels, params_train,
         # save the values of the epoch
         stat_dict["train_loss"][input_epoch] = epoch_stats["avg_train_loss"]
         stat_dict["train_acc"][input_epoch] = epoch_stats["avg_train_acc"]
+        stat_dict["train_precision"][input_epoch] = epoch_stats["avg_train_precision"]
+        stat_dict["train_recall"][input_epoch] = epoch_stats["avg_train_recall"]
         stat_dict["train_f1"][input_epoch] = epoch_stats["avg_train_f1"]
+        stat_dict["train_precision_class"][input_epoch] = epoch_stats["avg_train_precision_class"].tolist()
+        stat_dict["train_recall_class"][input_epoch] = epoch_stats["avg_train_recall_class"].tolist()
+        stat_dict["train_f1_class"][input_epoch] = epoch_stats["avg_train_f1_class"].tolist()
         stat_dict["train_kappa"][input_epoch] = epoch_stats["avg_train_kappa"]
+
         stat_dict["val_loss"][input_epoch] = epoch_stats["avg_val_loss"]
         stat_dict["val_acc"][input_epoch] = epoch_stats["avg_val_acc"]
+        stat_dict["val_precision"][input_epoch] = epoch_stats["avg_val_precision"]
+        stat_dict["val_recall"][input_epoch] = epoch_stats["avg_val_recall"]
         stat_dict["val_f1"][input_epoch] = epoch_stats["avg_val_f1"]
+        stat_dict["val_precision_class"][input_epoch] = epoch_stats["avg_val_precision_class"].tolist()
+        stat_dict["val_recall_class"][input_epoch] = epoch_stats["avg_val_recall_class"].tolist()
+        stat_dict["val_f1_class"][input_epoch] = epoch_stats["avg_val_f1_class"].tolist()
         stat_dict["val_kappa"][input_epoch] = epoch_stats["avg_val_kappa"]
         stat_dict["duration"][input_epoch] = stats_epoch_duration
 
@@ -807,6 +931,16 @@ def train_model(input_images, input_labels, params_train,
         if epoch_stats["avg_train_acc"] > stat_dict["train_best_acc_value"]:
             stat_dict["train_best_acc_value"] = epoch_stats["avg_train_acc"]
             stat_dict["train_best_acc_epoch"] = input_epoch
+
+        # save the best value and epoch for train precision
+        if epoch_stats["avg_train_precision"] > stat_dict["train_best_precision_value"]:
+            stat_dict["train_best_precision_value"] = epoch_stats["avg_train_precision"]
+            stat_dict["train_best_precision_epoch"] = input_epoch
+
+        # save the best value and epoch for train recall
+        if epoch_stats["avg_train_recall"] > stat_dict["train_best_recall_value"]:
+            stat_dict["train_best_recall_value"] = epoch_stats["avg_train_recall"]
+            stat_dict["train_best_recall_epoch"] = input_epoch
 
         # save the best value and epoch for train f1
         if epoch_stats["avg_train_f1"] > stat_dict["train_best_f1_value"]:
@@ -828,6 +962,16 @@ def train_model(input_images, input_labels, params_train,
         if epoch_stats["avg_val_acc"] < stat_dict["val_best_acc_value"]:
             stat_dict["val_best_acc_value"] = epoch_stats["avg_train_acc"]
             stat_dict["val_best_acc_epoch"] = input_epoch
+
+        # save the best value and epoch for val precision
+        if epoch_stats["avg_val_precision"] < stat_dict["val_best_precision_value"]:
+            stat_dict["val_best_precision_value"] = epoch_stats["avg_train_precision"]
+            stat_dict["val_best_precision_epoch"] = input_epoch
+
+        # save the best value and epoch for val recall
+        if epoch_stats["avg_val_recall"] < stat_dict["val_best_recall_value"]:
+            stat_dict["val_best_recall_value"] = epoch_stats["avg_train_recall"]
+            stat_dict["val_best_recall_epoch"] = input_epoch
 
         # save the best value and epoch for val f1
         if epoch_stats["avg_val_f1"] < stat_dict["val_best_f1_value"]:
@@ -1048,16 +1192,19 @@ if __name__ == "__main__":
     images = {}
     labels = {}
     for img_id in list_ids:
-        image = liff.load_image_from_file(img_id, image_path=path_folder_images, verbose=bool_verbose)
-        segmented = liff.load_image_from_file(img_id, image_path=path_folder_segmented, verbose=bool_verbose)
+
+        print(f"Load {img_id}")
+
+        image = liff.load_image_from_file(img_id, image_path=path_folder_images, verbose=False, catch=False)
+        segmented = liff.load_image_from_file(img_id, image_path=path_folder_segmented, verbose=False, catch=False)
 
         if image is None or segmented is None:
             print("Loading for {} failed".format(img_id))
             continue
 
         # remove edge
-        image = coe.cut_off_edge(image, img_id, db_type=db_type, verbose=bool_verbose, catch=False)
-        segmented = coe.cut_off_edge(segmented, img_id, db_type=db_type, verbose=bool_verbose, catch=False)
+        image = rb.remove_borders(image, img_id, verbose=False, catch=False)
+        segmented = rb.remove_borders(segmented, img_id, verbose=False, catch=False)
 
         if image is None or segmented is None:
             print(f"Something went wrong with {img_id} and this image is skipped")
@@ -1071,6 +1218,7 @@ if __name__ == "__main__":
         labels[img_id] = segmented
 
         if params_debugging["display_input_images"]:
-            ds.display_segmented(image, segmented)
+            pass
+            #ds.display_segmented(image, segmented)
 
     train_model(images, labels, params_training, params_augmentation, params_debugging, verbose=bool_verbose)

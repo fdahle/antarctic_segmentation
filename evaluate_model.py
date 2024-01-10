@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import load_data_from_json as ldfj
+import base_functions.load_data_from_json as ldfj
 
 model_name = "<Your model id>"
 model_folder = "<Enter your path to the folder where the models should be stored>"
@@ -190,4 +190,4 @@ def evaluate_model(json_name, json_folder, params):
 if __name__ == "__main__":
 
 
-    evaluate_model(model_name, folder, evaluation_params)
+    evaluate_model(model_name, model_folder, evaluation_params)
