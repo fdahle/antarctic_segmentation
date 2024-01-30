@@ -12,10 +12,14 @@ import shutil
 import sklearn.metrics as sm
 import numpy as np
 import torch
+
+from pytorch_msssim import SSIM
 from torch import nn
 from torch.utils.data import DataLoader
 
-from pytorch_msssim import SSIM
+
+from classes.dice_loss import DiceLoss
+from classes.focal_loss import FocalLoss
 
 # get current code-folder
 workdir = str(pathlib.Path().resolve())[:-4]
@@ -25,8 +29,8 @@ sys.path.append(workdir + "/base_functions")
 sys.path.append(workdir + "/display_functions")
 
 import base_functions.get_ids_from_folder as giff
-import base.load_image_from_file as liff
-import base.remove_borders as rb
+import base_functions.load_image_from_file as liff
+import base_functions.remove_borders as rb
 import base_functions.load_data_from_json as ldfj
 
 #import display.display_segmented as ds
@@ -81,13 +85,6 @@ bool_verbose = True
 path_folder_images = "<Enter your path to the folder with the images>"
 path_folder_segmented = "<Enter your path to the folder with the segmented images>"
 path_folder_models = "<Enter your path to the folder where the models should be stored>"
-
-else:
-    path_folder_images = None
-    path_folder_models = None
-    path_folder_segmented = None
-    print("Please specify the right code location")
-    exit()
 
 db_type = "FILES"
 
@@ -425,9 +422,11 @@ def train_model(input_images, input_labels, params_train,
             ssim_module = SSIM(data_range=input_params_train["output_layers"], size_average=True, channel=1)
             loss = 1 - ssim_module(y_argmax_expanded, y_true_expanded)
         elif input_params_train["loss_type"] == "focal":
-            pass
+            focal = FocalLoss(alpha=weights, ignore_index=6)
+            loss = focal.forward(y_pred, y_true)
         elif input_params_train["loss_type"] == "dice":
-            pass
+            dice= DiceLoss(mode="multiclass", ignore_index=6)
+            loss = dice.forward(y_pred, y_true)
         else:
             loss = None
             print("A wrong loss was set. Please select a different loss type")
