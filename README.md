@@ -1,4 +1,7 @@
-# Antarctic Segmentation
+# SfM-Hist: Semantion Segmentation
+
+> Part of the **SfM-Hist** suite for automated 3D reconstruction from historical imagery.<br>
+> See also: [Georeferencing](https://github.com/fdahle/sfm-hist-georef) | [Metadata Extraction](https://github.com/fdahle/sfm-hist-metadata)
 
 This repository contains code for **semantic segmentation of historical cryospheric aerial imagery** using U-Net models. It was developed as part of a PhD project at TU Delft to classify surface types in historical photographs of the Antarctic Peninsula.
 
