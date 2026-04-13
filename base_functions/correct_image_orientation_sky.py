@@ -72,7 +72,7 @@ def correct_image_orientation_sky(input_img, input_segmented, img_id=None, sky_i
                                   segmented[segmented.shape[0] - 200:, :].size))
     try:
         sky_bottom = percentages_bottom[sky_id]
-        if sky_bottom < 0:
+        if sky_bottom < 1:
             sky_bottom = 0
     except (Exception,):
         sky_bottom = 0

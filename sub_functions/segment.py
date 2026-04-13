@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as func
 import torch.optim as optim
-from torch.autograd import Variable
 
 import numpy as np
 import cv2
@@ -57,7 +56,6 @@ def segment(img, max_labels, max_segment_id):
     data = torch.from_numpy(np.array([img.transpose((2, 0, 1)).astype('float32') / 255.]))
     if use_cuda:
         data = data.cuda()
-    data = Variable(data)
 
     model = MyNet(data.size(1))
     if use_cuda:
@@ -68,8 +66,8 @@ def segment(img, max_labels, max_segment_id):
     loss_fn = torch.nn.CrossEntropyLoss()
 
     # continuity loss definition
-    loss_hpy = torch.nn.L1Loss(size_average=True)
-    loss_hpz = torch.nn.L1Loss(size_average=True)
+    loss_hpy = torch.nn.L1Loss(reduction='mean')
+    loss_hpz = torch.nn.L1Loss(reduction='mean')
 
     h_py_target = torch.zeros(img.shape[0] - 1, img.shape[1], nChannels)
     h_pz_target = torch.zeros(img.shape[0], img.shape[1] - 1, nChannels)

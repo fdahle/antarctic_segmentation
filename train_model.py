@@ -22,7 +22,7 @@ from classes.dice_loss import DiceLoss
 from classes.focal_loss import FocalLoss
 
 # get current code-folder
-workdir = str(pathlib.Path().resolve())[:-4]
+workdir = str(pathlib.Path(__file__).parent.resolve())
 
 # add base and display functions
 sys.path.append(workdir + "/base_functions")
@@ -30,7 +30,7 @@ sys.path.append(workdir + "/display_functions")
 
 import base_functions.get_ids_from_folder as giff
 import base_functions.load_image_from_file as liff
-import base_functions.remove_borders as rb
+import base_functions.cut_off_edge as coe
 import base_functions.load_data_from_json as ldfj
 
 #import display.display_segmented as ds
@@ -152,11 +152,11 @@ if args.aug_method is not None:
     else:
         print("The wrong parameter was used")
         exit()
-if args.aug_method is not None:
-    if args.bool_continue_training == "True":
+if args.bool_normalize is not None:
+    if args.bool_normalize == "True":
         if params_augmentation["methods"][-1] != "normalize":
             params_augmentation["methods"].append("normalize")
-    elif args.bool_continue_training == "False":
+    elif args.bool_normalize == "False":
         if params_augmentation["methods"][-1] == "normalize":
             params_augmentation["methods"].pop()
     else:
@@ -389,7 +389,7 @@ def train_model(input_images, input_labels, params_train,
         if os.path.exists(path_folder_models + "/" + params_training["model_name"] + ".pth"):
             continue_model_path = path_folder_models + "/" + params_training["model_name"] + ".pth"
 
-            date_time = datetime.datetime.now().strftime("%d_%d_%Y")
+            date_time = datetime.datetime.now().strftime("%d_%m_%Y")
             copy_path = continue_model_path[:-4] + "_backup_" + date_time + ".pth"
 
             shutil.copyfile(continue_model_path, copy_path)
@@ -403,7 +403,7 @@ def train_model(input_images, input_labels, params_train,
         elif os.path.exists(path_folder_models + "/" + params_training["model_name"] + ".pt"):
             continue_model_path = path_folder_models + "/" + params_training["model_name"] + ".pt"
 
-            date_time = datetime.datetime.now().strftime("%d_%d_%Y")
+            date_time = datetime.datetime.now().strftime("%d_%m_%Y")
             copy_path = continue_model_path[:-3] + "__backup_" + date_time + ".pt"
 
             shutil.copyfile(continue_model_path, copy_path)
@@ -827,9 +827,9 @@ def train_model(input_images, input_labels, params_train,
                     val_precision = np.mean(subset_precision_scores)
                     val_recall = np.mean(subset_recall_scores)
                     val_f1 = np.mean(subset_f1_scores)
-                    val_precision_class = np.mean(subset_precision_scores)
-                    val_recall_class = np.mean(subset_recall_scores)
-                    val_f1_class = np.mean(subset_f1_scores)
+                    val_precision_class = np.mean(subset_precision_class_scores, axis=1)
+                    val_recall_class = np.mean(subset_recall_class_scores, axis=1)
+                    val_f1_class = np.mean(subset_f1_class_scores, axis=1)
                     val_kappa = np.mean(subset_kappa_scores)
                 else:
                     val_loss, val_accuracy, val_precision, val_recall, val_f1, \
@@ -958,28 +958,28 @@ def train_model(input_images, input_labels, params_train,
             model_is_the_best = True
 
         # save the best value and epoch for val acc
-        if epoch_stats["avg_val_acc"] < stat_dict["val_best_acc_value"]:
-            stat_dict["val_best_acc_value"] = epoch_stats["avg_train_acc"]
+        if epoch_stats["avg_val_acc"] > stat_dict["val_best_acc_value"]:
+            stat_dict["val_best_acc_value"] = epoch_stats["avg_val_acc"]
             stat_dict["val_best_acc_epoch"] = input_epoch
 
         # save the best value and epoch for val precision
-        if epoch_stats["avg_val_precision"] < stat_dict["val_best_precision_value"]:
-            stat_dict["val_best_precision_value"] = epoch_stats["avg_train_precision"]
+        if epoch_stats["avg_val_precision"] > stat_dict["val_best_precision_value"]:
+            stat_dict["val_best_precision_value"] = epoch_stats["avg_val_precision"]
             stat_dict["val_best_precision_epoch"] = input_epoch
 
         # save the best value and epoch for val recall
-        if epoch_stats["avg_val_recall"] < stat_dict["val_best_recall_value"]:
-            stat_dict["val_best_recall_value"] = epoch_stats["avg_train_recall"]
+        if epoch_stats["avg_val_recall"] > stat_dict["val_best_recall_value"]:
+            stat_dict["val_best_recall_value"] = epoch_stats["avg_val_recall"]
             stat_dict["val_best_recall_epoch"] = input_epoch
 
         # save the best value and epoch for val f1
-        if epoch_stats["avg_val_f1"] < stat_dict["val_best_f1_value"]:
-            stat_dict["val_best_f1_value"] = epoch_stats["avg_train_f1"]
+        if epoch_stats["avg_val_f1"] > stat_dict["val_best_f1_value"]:
+            stat_dict["val_best_f1_value"] = epoch_stats["avg_val_f1"]
             stat_dict["val_best_f1_epoch"] = input_epoch
 
         # save the best value and epoch for val kappa
-        if epoch_stats["avg_val_kappa"] < stat_dict["val_best_kappa_value"]:
-            stat_dict["val_best_kappa_value"] = epoch_stats["avg_train_kappa"]
+        if epoch_stats["avg_val_kappa"] > stat_dict["val_best_kappa_value"]:
+            stat_dict["val_best_kappa_value"] = epoch_stats["avg_val_kappa"]
             stat_dict["val_best_kappa_epoch"] = input_epoch
 
         return statistics_dict, model_is_the_best
@@ -1202,8 +1202,8 @@ if __name__ == "__main__":
             continue
 
         # remove edge
-        image = rb.remove_borders(image, img_id, verbose=False, catch=False)
-        segmented = rb.remove_borders(segmented, img_id, verbose=False, catch=False)
+        image = coe.cut_off_edge(image, img_id, verbose=False, catch=False)
+        segmented = coe.cut_off_edge(segmented, img_id, verbose=False, catch=False)
 
         if image is None or segmented is None:
             print(f"Something went wrong with {img_id} and this image is skipped")

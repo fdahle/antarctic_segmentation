@@ -1,11 +1,10 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
-import get_ids_from_folder as giff
-import load_image_from_file as liff
-import cut_off_edge as coe
-import segment_image as si
-
-import display_multiple_images as dmi
+import base_functions.get_ids_from_folder as giff
+import base_functions.load_image_from_file as liff
+import base_functions.cut_off_edge as coe
+import base_functions.segment_image as si
 
 """
 apply_model(select_type, path_model, model_id,  num_images):
@@ -49,7 +48,13 @@ def apply_model(select_type, path_model, model_id, path_folder_images, num_image
 
         pred, probabilities, highest_prob = si.segment_image(img, image_id, model_path=path_model, model_id=model_id)
 
-        dmi.display_multiple_images([img, pred, highest_prob], subtitles=["raw", "pred", "highest_prob"])
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        for ax, data, title in zip(axes, [img, pred, highest_prob], ["raw", "pred", "highest_prob"]):
+            ax.imshow(data, cmap="gray" if title == "raw" else None)
+            ax.set_title(title)
+            ax.axis("off")
+        plt.tight_layout()
+        plt.show()
 
 
 if __name__ == "__main__":

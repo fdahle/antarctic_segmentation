@@ -7,7 +7,7 @@ import torch
 import cv2
 import numpy as np
 
-import u_net as u_net
+from classes.u_net import UNET
 
 
 def segment_image(input_img, img_id=None,
@@ -21,7 +21,7 @@ def segment_image(input_img, img_id=None,
     # 1: ice, 2: snow, 3: rocks, 4: water, 5: clouds, 6:sky, 7: unknown
 
     if model_path is None:
-        model_path = "<Path to the folder with your models">
+        model_path = "<Path to the folder with your models>"
 
     # deep copy to not change the original
     img = copy.deepcopy(input_img)
@@ -88,7 +88,7 @@ def segment_image(input_img, img_id=None,
             model.eval()
         elif absolute_model_path.split(".")[-1] == "pth":
 
-            model = u_net.UNET(num_layers, num_output_layers)
+            model = UNET(num_layers, num_output_layers)
             model.to(device)
             checkpoint = torch.load(absolute_model_path)
             model.load_state_dict(checkpoint["model_state_dict"])
